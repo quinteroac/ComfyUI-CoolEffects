@@ -28,8 +28,20 @@ _effect_selector_module = _load_module_from_path(
 )
 CoolEffectSelector = _effect_selector_module.CoolEffectSelector
 
-NODE_CLASS_MAPPINGS = {"CoolEffectSelector": CoolEffectSelector}
-NODE_DISPLAY_NAME_MAPPINGS = {"CoolEffectSelector": "Cool Effect Selector"}
+_video_generator_module = _load_module_from_path(
+    "cool_effects_video_generator_runtime",
+    PACKAGE_ROOT / "nodes" / "video_generator.py",
+)
+CoolVideoGenerator = _video_generator_module.CoolVideoGenerator
+
+NODE_CLASS_MAPPINGS = {
+    "CoolEffectSelector": CoolEffectSelector,
+    "CoolVideoGenerator": CoolVideoGenerator,
+}
+NODE_DISPLAY_NAME_MAPPINGS = {
+    "CoolEffectSelector": "Cool Effect Selector",
+    "CoolVideoGenerator": "Cool Video Generator",
+}
 
 
 class _JsonResponseFallback:

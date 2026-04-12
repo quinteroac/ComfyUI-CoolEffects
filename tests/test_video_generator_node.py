@@ -9,6 +9,7 @@ import torch
 
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 NODE_PATH = PACKAGE_ROOT / "nodes" / "video_generator.py"
+PACKAGE_INIT = PACKAGE_ROOT / "__init__.py"
 
 
 def _load_module(module_path: Path):
@@ -174,6 +175,33 @@ def test_video_generator_uses_standalone_context_and_frame_time(monkeypatch):
     assert output.shape == (4, 2, 3, 3)
 
 
+def test_video_generator_input_types_expose_fps_and_duration_widgets():
+    module = _load_module(NODE_PATH)
+
+    input_types = module.CoolVideoGenerator.INPUT_TYPES()
+    required_inputs = input_types["required"]
+
+    assert required_inputs["fps"] == ("INT", {"default": 30, "min": 1, "max": 60})
+    assert required_inputs["duration"] == (
+        "FLOAT",
+        {"default": 3.0, "min": 0.5, "max": 60.0, "step": 0.5},
+    )
+
+
+def test_video_generator_rounds_total_frames_from_duration_times_fps(monkeypatch):
+    module = _load_module(NODE_PATH)
+    fake_moderngl = _FakeModerngl()
+    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
+    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
+
+    node = module.CoolVideoGenerator()
+    image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
+    output, = node.execute(image=image, effect_name="glitch", fps=3, duration=0.5)
+
+    assert output.shape[0] == round(0.5 * 3)
+    assert fake_moderngl.latest_context.vertex_array_object.rendered_times == [0.0, 1.0 / 3.0]
+
+
 def test_video_generator_reads_rgb_bytes_per_frame(monkeypatch):
     module = _load_module(NODE_PATH)
     fake_moderngl = _FakeModerngl()
@@ -295,3 +323,10 @@ def test_video_generator_releases_gl_resources(monkeypatch):
     assert context.vertex_array_object.released is True
     assert all(texture.released for texture in context.texture_objects)
     assert context.released is True
+
+
+def test_package_registers_cool_video_generator_node():
+    package_module = _load_module(PACKAGE_INIT)
+
+    assert "CoolVideoGenerator" in package_module.NODE_CLASS_MAPPINGS
+    assert package_module.NODE_DISPLAY_NAME_MAPPINGS["CoolVideoGenerator"] == "Cool Video Generator"

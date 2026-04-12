@@ -19,3 +19,13 @@
 **Pitfalls Encountered:** Acceptance criteria text in JSON artifacts was truncated in some fields; full wording in the markdown PRD was used to derive precise assertions for shape/range/compatibility expectations.
 
 **Useful Context for Future Agents:** `_FakeFramebuffer` now tracks read component usage and emits non-zero per-frame byte patterns, making it safer to assert readback, dtype, and normalization behavior without GPU dependencies.
+
+## US-003 — Duration and FPS Configuration
+
+**Summary:** Confirmed and completed configurable FPS/duration support by registering `CoolVideoGenerator` at package level and adding targeted tests for widget metadata and frame-count rounding behavior.
+
+**Key Decisions:** Kept runtime logic aligned with the existing contract (`round(duration * fps)`) and asserted exact ComfyUI widget schema in `INPUT_TYPES` (`INT` for `fps`, `FLOAT` for `duration` with min/max/step metadata).
+
+**Pitfalls Encountered:** The node class implemented FPS/duration inputs already, but package registration did not export `CoolVideoGenerator`, which would prevent users from seeing those widgets in the node list.
+
+**Useful Context for Future Agents:** `tests/test_video_generator_node.py` now includes AC-focused assertions for widget definitions, rounded frame count for fractional durations, and package-level registration/display-name wiring.
