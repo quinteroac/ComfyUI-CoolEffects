@@ -40,6 +40,23 @@ def test_execute_returns_effect_name_as_string_output():
     assert isinstance(effect_name, str)
 
 
+def test_node_declares_image_input_and_image_string_outputs(monkeypatch):
+    module = _load_module(NODE_PATH)
+    monkeypatch.setattr(module, "list_shaders", lambda: ["glitch"])
+
+    input_types = module.CoolEffectSelector.INPUT_TYPES()
+
+    assert input_types["required"]["image"] == ("IMAGE",)
+    assert module.CoolEffectSelector.RETURN_TYPES == ("IMAGE", "STRING")
+    assert module.CoolEffectSelector.RETURN_NAMES == ("IMAGE", "EFFECT_NAME")
+
+
+def test_node_category_is_cool_effects():
+    module = _load_module(NODE_PATH)
+
+    assert module.CoolEffectSelector.CATEGORY == "CoolEffects"
+
+
 def test_package_registers_cool_effect_selector_node():
     package_module = _load_module(PACKAGE_INIT)
 

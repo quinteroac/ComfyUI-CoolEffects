@@ -19,3 +19,13 @@
 **Pitfalls Encountered:** `u_resolution` initially stayed at the old dimensions during tests because `clientWidth/clientHeight` were not updated by `resize`; fixed by updating both canvas dimensions and client dimensions before recomputing uniforms.
 
 **Useful Context for Future Agents:** The JS test strategy in this repo relies on fake DOM elements and Node subprocess execution, so exported pure functions/controllers are easier to validate than tightly coupled browser-only widget code; keep widget logic decomposed into testable units.
+
+## US-003 — Node Inputs and Outputs
+
+**Summary:** Kept `CoolEffectSelector` behavior aligned with workflow chaining requirements and added explicit node tests for image input typing, IMAGE + EFFECT_NAME outputs, passthrough execute behavior, registration, and category placement.
+
+**Key Decisions:** Focused changes on test coverage because node implementation already matched the acceptance criteria; asserted metadata directly (`RETURN_TYPES`, `RETURN_NAMES`, `CATEGORY`) to prevent regressions in ComfyUI wiring.
+
+**Pitfalls Encountered:** The environment lacks `pytest`, so full suite execution could not run locally in this session.
+
+**Useful Context for Future Agents:** Existing selector tests already cover registration and execute semantics; when extending selector behavior, keep assertions around class-level ComfyUI contracts since these are the integration surface for downstream nodes.
