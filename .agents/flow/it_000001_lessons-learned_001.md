@@ -39,3 +39,13 @@
 **Pitfalls Encountered:** JavaScript behavior is easiest to verify through Node ESM subprocess tests from pytest, but this environment still lacks a runnable pytest module, so only direct module import sanity checks could be executed here.
 
 **Useful Context for Future Agents:** The JS loader now centralizes both endpoint listing and GLSL source loading; frontend widgets can import from `../shaders/loader.js` and avoid duplicate fetch/error logic.
+
+## US-005 — Initial Shader Effects
+
+**Summary:** Upgraded `glitch.frag`, `vhs.frag`, and `zoom_pulse.frag` to distinct GLSL effects that compile under ModernGL, added `shaders/README.md` documenting the uniform contract, and added AC-focused shader tests.
+
+**Key Decisions:** Standardized all fragment shaders on `#version 330` with `out vec4 frag_color` for ModernGL compatibility and used a shared test vertex shader to compile each fragment shader in isolation.
+
+**Pitfalls Encountered:** ModernGL standalone context availability can vary by environment/backend, so the compile test intentionally skips when no compatible context can be created.
+
+**Useful Context for Future Agents:** Keep shader source files explicit about required uniform declarations (`u_image`, `u_time`, `u_resolution`); this ensures compatibility for both loader validation and future rendering nodes that swap shaders dynamically.
