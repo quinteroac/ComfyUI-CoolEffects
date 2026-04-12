@@ -414,14 +414,172 @@ const controller = await create_live_glsl_preview({{
 
 console.log(JSON.stringify({{
     background: controller.canvas_element.style.background,
+    overlayText: controller.overlay_element.textContent,
     hasError: Boolean(preview_state.preview_error),
     uImage: controller.preview_descriptor.uniforms.u_image,
 }}));
 """
     output = _run_node_module(script)
     assert output["background"] == "rgb(128, 128, 128)"
+    assert output["overlayText"] == ""
     assert output["hasError"] is False
     assert output["uImage"] is None
+
+
+def test_mount_widget_initializes_preview_with_js_placeholder_texture():
+    script = f"""
+import {{ mount_effect_selector_widget_for_node }} from "{WIDGET_URL}";
+
+class FakeElement {{
+    constructor(tagName) {{
+        this.tagName = tagName;
+        this.children = [];
+        this.listeners = {{}};
+        this.attributes = {{}};
+        this.value = "";
+        this.textContent = "";
+        this.width = 512;
+        this.height = 512;
+        this.clientWidth = 512;
+        this.clientHeight = 512;
+        this.style = {{}};
+    }}
+    appendChild(child) {{
+        this.children.push(child);
+        return child;
+    }}
+    addEventListener(name, listener) {{
+        this.listeners[name] = listener;
+    }}
+    setAttribute(name, value) {{
+        this.attributes[name] = value;
+    }}
+    getContext(kind) {{
+        if (this.tagName !== "canvas" || kind !== "2d") {{
+            return null;
+        }}
+        return {{
+            fillStyle: "",
+            strokeStyle: "",
+            lineWidth: 1,
+            createLinearGradient() {{
+                return {{ addColorStop() {{}} }};
+            }},
+            fillRect() {{}},
+            beginPath() {{}},
+            moveTo() {{}},
+            lineTo() {{}},
+            stroke() {{}},
+        }};
+    }}
+}}
+
+const document_ref = {{
+    createElement(tagName) {{
+        return new FakeElement(tagName);
+    }},
+}};
+
+let fetch_called = false;
+globalThis.fetch = async () => {{
+    fetch_called = true;
+    throw new Error("unexpected fetch");
+}};
+
+const node = {{
+    widgets: [{{ name: "effect_name", value: "" }}],
+    properties: {{}},
+    addDOMWidget(_name, _type, element) {{
+        this.container = element;
+        return {{ element }};
+    }},
+    setDirtyCanvas() {{}},
+}};
+
+const widget_state = await mount_effect_selector_widget_for_node({{
+    node,
+    document_ref,
+    shader_names_loader: async () => ["glitch", "vhs"],
+    shader_loader: async (name) => `shader-${{name}}`,
+    request_animation_frame: () => 1,
+}});
+
+const controller = widget_state.preview_state.preview_controller;
+console.log(JSON.stringify({{
+    placeholderTag: controller.preview_descriptor.uniforms.u_image?.tagName ?? null,
+    overlayText: controller.overlay_element.textContent,
+    canvasBackground: controller.canvas_element.style.background,
+    fetchCalled: fetch_called,
+}}));
+"""
+    output = _run_node_module(script)
+    assert output["placeholderTag"] == "canvas"
+    assert output["overlayText"] == ""
+    assert output["canvasBackground"] == "transparent"
+    assert output["fetchCalled"] is False
+
+
+def test_switching_effect_keeps_placeholder_texture_instance():
+    script = f"""
+import {{ create_live_glsl_preview }} from "{WIDGET_URL}";
+
+class FakeElement {{
+    constructor(tagName) {{
+        this.tagName = tagName;
+        this.children = [];
+        this.attributes = {{}};
+        this.textContent = "";
+        this.width = 512;
+        this.height = 512;
+        this.clientWidth = 512;
+        this.clientHeight = 512;
+        this.style = {{}};
+    }}
+    appendChild(child) {{
+        this.children.push(child);
+        return child;
+    }}
+    setAttribute(name, value) {{
+        this.attributes[name] = value;
+    }}
+}}
+
+const document_ref = {{
+    createElement(tagName) {{
+        return new FakeElement(tagName);
+    }},
+}};
+const container_element = new FakeElement("div");
+const placeholder_texture = {{ type: "placeholder" }};
+const shader_calls = [];
+const controller = await create_live_glsl_preview({{
+    document_ref,
+    container_element,
+    effect_name: "glitch",
+    input_image: placeholder_texture,
+    shader_loader: async (name) => {{
+        shader_calls.push(name);
+        return `shader-${{name}}`;
+    }},
+    request_animation_frame: () => 1,
+}});
+
+const image_before = controller.preview_descriptor.uniforms.u_image;
+await controller.set_effect("vhs");
+const image_after = controller.preview_descriptor.uniforms.u_image;
+
+console.log(JSON.stringify({{
+    shaderCalls: shader_calls,
+    effectName: controller.preview_descriptor.effect_name,
+    fragmentShaderSource: controller.preview_descriptor.fragment_shader_source,
+    sameTexture: image_before === image_after,
+}}));
+"""
+    output = _run_node_module(script)
+    assert output["shaderCalls"] == ["glitch", "vhs"]
+    assert output["effectName"] == "vhs"
+    assert output["fragmentShaderSource"] == "shader-vhs"
+    assert output["sameTexture"] is True
 
 
 def test_live_preview_uses_default_js_load_shader_for_effect_source():

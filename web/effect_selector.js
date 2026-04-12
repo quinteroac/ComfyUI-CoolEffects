@@ -129,7 +129,7 @@ export function create_canvas_preview_surface(document_ref) {
     canvas_element.setAttribute("data-renderer", "r3f");
     canvas_element.setAttribute("aria-label", "Live GLSL preview");
     canvas_element.style = canvas_element.style || {};
-    canvas_element.style.background = "rgb(128, 128, 128)";
+    canvas_element.style.background = "transparent";
     root_element.appendChild(canvas_element);
 
     const overlay_element = document_ref.createElement("div");
@@ -141,6 +141,57 @@ export function create_canvas_preview_surface(document_ref) {
     root_element.appendChild(overlay_element);
 
     return { root_element, canvas_element, overlay_element };
+}
+
+export function create_placeholder_texture(document_ref, size = 512) {
+    if (!document_ref || typeof document_ref.createElement !== "function") {
+        throw new Error("Missing document reference for placeholder texture");
+    }
+
+    const resolved_size =
+        Number(size) > 0 ? Math.round(Number(size)) : 512;
+    const canvas_element = document_ref.createElement("canvas");
+    canvas_element.width = resolved_size;
+    canvas_element.height = resolved_size;
+    const context =
+        typeof canvas_element.getContext === "function"
+            ? canvas_element.getContext("2d")
+            : null;
+    if (!context) {
+        return canvas_element;
+    }
+
+    const base_gradient = context.createLinearGradient(
+        0,
+        0,
+        resolved_size,
+        resolved_size,
+    );
+    base_gradient.addColorStop(0, "rgb(22, 58, 122)");
+    base_gradient.addColorStop(1, "rgb(187, 214, 255)");
+    context.fillStyle = base_gradient;
+    context.fillRect(0, 0, resolved_size, resolved_size);
+
+    const checker_size = Math.max(16, Math.floor(resolved_size / 16));
+    for (let y = 0; y < resolved_size; y += checker_size) {
+        for (let x = 0; x < resolved_size; x += checker_size) {
+            if (((x + y) / checker_size) % 2 === 0) {
+                context.fillStyle = "rgba(255, 255, 255, 0.1)";
+                context.fillRect(x, y, checker_size, checker_size);
+            }
+        }
+    }
+
+    context.strokeStyle = "rgba(255, 255, 255, 0.4)";
+    context.lineWidth = Math.max(1, Math.floor(resolved_size / 256));
+    context.beginPath();
+    context.moveTo(0, resolved_size * 0.5);
+    context.lineTo(resolved_size, resolved_size * 0.5);
+    context.moveTo(resolved_size * 0.5, 0);
+    context.lineTo(resolved_size * 0.5, resolved_size);
+    context.stroke();
+
+    return canvas_element;
 }
 
 export function create_preview_descriptor({
@@ -210,9 +261,7 @@ export async function create_live_glsl_preview({
             overlay_element.textContent = preview_state.preview_error;
             return;
         }
-        overlay_element.textContent = preview_descriptor.uniforms.u_image
-            ? ""
-            : "Connect an image to preview this effect.";
+        overlay_element.textContent = "";
     };
 
     let three_stack = null;
@@ -491,10 +540,12 @@ export async function mount_effect_selector_widget_for_node({
         },
         now,
     });
+    const placeholder_texture = create_placeholder_texture(document_ref, 512);
     await create_live_glsl_preview({
         document_ref,
         container_element,
         effect_name: preview_state.effect_name,
+        input_image: placeholder_texture,
         preview_state,
         shader_loader,
         request_animation_frame,
