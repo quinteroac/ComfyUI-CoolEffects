@@ -10,6 +10,7 @@ torch = pytest.importorskip("torch")
 
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 NODE_PATH = PACKAGE_ROOT / "nodes" / "video_generator.py"
+SELECTOR_NODE_PATH = PACKAGE_ROOT / "nodes" / "effect_selector.py"
 PACKAGE_INIT = PACKAGE_ROOT / "__init__.py"
 
 
@@ -154,10 +155,31 @@ class _FakeModerngl:
         self.create_calls = 0
         self.latest_context = None
 
-    def create_standalone_context(self):
+    def create_standalone_context(self, **_kwargs):
         self.create_calls += 1
         self.latest_context = _FakeContext()
         return self.latest_context
+
+
+def test_selector_effect_name_output_connects_to_video_generator_effect_input(monkeypatch):
+    selector_module = _load_module(SELECTOR_NODE_PATH)
+    video_module = _load_module(NODE_PATH)
+    fake_moderngl = _FakeModerngl()
+    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
+    monkeypatch.setattr(video_module, "load_shader", lambda _name: "shader-source")
+    monkeypatch.setattr(video_module, "load_vertex_shader", lambda _name: "vertex-source")
+
+    selector = selector_module.CoolEffectSelector()
+    effect_name, = selector.execute("vhs")
+
+    generator = video_module.CoolVideoGenerator()
+    image = torch.ones((1, 2, 2, 3), dtype=torch.float32)
+    output, = generator.execute(image=image, effect_name=effect_name, fps=1, duration=1.0)
+
+    assert selector_module.CoolEffectSelector.RETURN_TYPES == ("STRING",)
+    assert video_module.CoolVideoGenerator.INPUT_TYPES()["required"]["effect_name"][0] == "STRING"
+    assert effect_name == "vhs"
+    assert output.shape == (1, 2, 2, 3)
 
 
 def test_video_generator_uses_standalone_context_and_frame_time(monkeypatch):

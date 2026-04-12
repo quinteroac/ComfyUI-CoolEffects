@@ -1,4 +1,5 @@
 import importlib.util
+import inspect
 import uuid
 from pathlib import Path
 
@@ -31,24 +32,34 @@ def test_input_types_exposes_dropdown_with_all_shaders(monkeypatch):
 def test_execute_returns_effect_name_as_string_output():
     module = _load_module(NODE_PATH)
     selector = module.CoolEffectSelector()
-    image = object()
 
-    returned_image, effect_name = selector.execute(image, "vhs")
+    effect_name, = selector.execute("vhs")
 
-    assert returned_image is image
     assert effect_name == "vhs"
     assert isinstance(effect_name, str)
 
 
-def test_node_declares_image_input_and_image_string_outputs(monkeypatch):
+def test_node_declares_only_effect_name_input_and_string_output(monkeypatch):
     module = _load_module(NODE_PATH)
     monkeypatch.setattr(module, "list_shaders", lambda: ["glitch"])
 
     input_types = module.CoolEffectSelector.INPUT_TYPES()
 
-    assert input_types["required"]["image"] == ("IMAGE",)
-    assert module.CoolEffectSelector.RETURN_TYPES == ("IMAGE", "STRING")
-    assert module.CoolEffectSelector.RETURN_NAMES == ("IMAGE", "EFFECT_NAME")
+    required_inputs = input_types.get("required", {})
+    optional_inputs = input_types.get("optional", {})
+
+    assert "image" not in required_inputs
+    assert "image" not in optional_inputs
+    assert required_inputs["effect_name"] == (["glitch"], {"default": "glitch"})
+    assert module.CoolEffectSelector.RETURN_TYPES == ("STRING",)
+    assert module.CoolEffectSelector.RETURN_NAMES == ("EFFECT_NAME",)
+
+
+def test_execute_signature_accepts_only_effect_name():
+    module = _load_module(NODE_PATH)
+    execute_parameters = list(inspect.signature(module.CoolEffectSelector.execute).parameters)
+
+    assert execute_parameters == ["self", "effect_name"]
 
 
 def test_node_category_is_cool_effects():

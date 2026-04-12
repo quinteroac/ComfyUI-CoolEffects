@@ -23,15 +23,14 @@ class CoolEffectSelector:
             raise ValueError("No shaders found in shaders/glsl")
         return {
             "required": {
-                "image": ("IMAGE",),
                 "effect_name": (shader_names, {"default": shader_names[0]}),
             }
         }
 
-    RETURN_TYPES = ("IMAGE", "STRING")
-    RETURN_NAMES = ("IMAGE", "EFFECT_NAME")
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("EFFECT_NAME",)
     FUNCTION = "execute"
     CATEGORY = "CoolEffects"
 
-    def execute(self, image, effect_name):
-        return (image, effect_name)
+    def execute(self, effect_name):
+        return (effect_name,)
