@@ -29,3 +29,13 @@
 **Pitfalls Encountered:** The node class implemented FPS/duration inputs already, but package registration did not export `CoolVideoGenerator`, which would prevent users from seeing those widgets in the node list.
 
 **Useful Context for Future Agents:** `tests/test_video_generator_node.py` now includes AC-focused assertions for widget definitions, rounded frame count for fractional durations, and package-level registration/display-name wiring.
+
+## US-004 — ComfyUI Node Integration
+
+**Summary:** Completed AC-focused integration coverage for `CoolVideoGenerator` so the node contract is fully verified for ComfyUI wiring (inputs, output type, category, registration, and 90-frame 512×512 render target).
+
+**Key Decisions:** Reused the existing fake-ModernGL test harness to keep tests deterministic and GPU-independent while still asserting the 512×512 / 3 s / 30 fps integration shape and runtime threshold.
+
+**Pitfalls Encountered:** The PRD JSON acceptance text for AC05 is truncated; the markdown PRD was used as the source of truth for the full criterion (`under 30 seconds`).
+
+**Useful Context for Future Agents:** US-004 coverage now lives in `tests/test_video_generator_node.py` via assertions on `INPUT_TYPES` (`image`, `effect_name`, `fps`, `duration`), `CATEGORY == "CoolEffects"`, `RETURN_TYPES == ("IMAGE",)`, package registration, and the 90-frame 512×512 execution/timing assertion.

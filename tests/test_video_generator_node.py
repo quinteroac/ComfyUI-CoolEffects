@@ -1,5 +1,6 @@
 import importlib.util
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -181,6 +182,8 @@ def test_video_generator_input_types_expose_fps_and_duration_widgets():
     input_types = module.CoolVideoGenerator.INPUT_TYPES()
     required_inputs = input_types["required"]
 
+    assert required_inputs["image"] == ("IMAGE",)
+    assert required_inputs["effect_name"] == ("STRING", {"default": "glitch"})
     assert required_inputs["fps"] == ("INT", {"default": 30, "min": 1, "max": 60})
     assert required_inputs["duration"] == (
         "FLOAT",
@@ -248,6 +251,12 @@ def test_video_generator_returns_image_output(monkeypatch):
     assert isinstance(result[0], torch.Tensor)
 
 
+def test_video_generator_category_is_cool_effects():
+    module = _load_module(NODE_PATH)
+
+    assert module.CoolVideoGenerator.CATEGORY == "CoolEffects"
+
+
 def test_video_generator_outputs_90_frames_for_3s_at_30fps(monkeypatch):
     module = _load_module(NODE_PATH)
     fake_moderngl = _FakeModerngl()
@@ -259,6 +268,23 @@ def test_video_generator_outputs_90_frames_for_3s_at_30fps(monkeypatch):
     output, = node.execute(image=image, effect_name="glitch", fps=30, duration=3.0)
 
     assert output.shape == (90, 4, 5, 3)
+
+
+def test_video_generator_renders_512_square_90_frames_under_30_seconds(monkeypatch):
+    module = _load_module(NODE_PATH)
+    fake_moderngl = _FakeModerngl()
+    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
+    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
+
+    node = module.CoolVideoGenerator()
+    image = torch.ones((1, 512, 512, 3), dtype=torch.float32)
+
+    start = time.perf_counter()
+    output, = node.execute(image=image, effect_name="glitch", fps=30, duration=3.0)
+    elapsed = time.perf_counter() - start
+
+    assert output.shape == (90, 512, 512, 3)
+    assert elapsed < 30.0
 
 
 def test_video_generator_output_is_preview_image_compatible(monkeypatch):
