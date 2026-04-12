@@ -20,8 +20,10 @@ def _load_loader_module():
 def test_loader_exports_required_functions():
     module = _load_loader_module()
     assert hasattr(module, "load_shader")
+    assert hasattr(module, "load_vertex_shader")
     assert hasattr(module, "list_shaders")
     assert callable(module.load_shader)
+    assert callable(module.load_vertex_shader)
     assert callable(module.list_shaders)
 
 
@@ -36,6 +38,19 @@ def test_load_shader_nonexistent_raises_file_not_found_with_name():
     missing_name = "nonexistent"
     with pytest.raises(FileNotFoundError, match=missing_name):
         module.load_shader(missing_name)
+
+
+def test_load_vertex_shader_returns_fullscreen_quad_source():
+    module = _load_loader_module()
+    expected = (GLSL_DIR / "fullscreen_quad.vert").read_text(encoding="utf-8")
+    assert module.load_vertex_shader() == expected
+
+
+def test_load_vertex_shader_nonexistent_raises_file_not_found_with_name():
+    module = _load_loader_module()
+    missing_name = "missing_quad"
+    with pytest.raises(FileNotFoundError, match=missing_name):
+        module.load_vertex_shader(missing_name)
 
 
 def test_loader_path_resolution_is_independent_from_cwd(tmp_path, monkeypatch):

@@ -192,6 +192,30 @@ const document_ref = {{
 const container_element = new FakeElement("div");
 const preview_state = {{}};
 const input_image = "image-texture";
+
+class FakeVector2 {{
+    constructor(x, y) {{
+        this.x = x;
+        this.y = y;
+    }}
+    set(x, y) {{
+        this.x = x;
+        this.y = y;
+    }}
+}}
+
+class FakeShaderMaterial {{
+    constructor(config) {{
+        this.uniforms = config.uniforms;
+        this.vertexShader = config.vertexShader;
+        this.fragmentShader = config.fragmentShader;
+        this.needsUpdate = false;
+    }}
+    dispose() {{
+        this.disposed = true;
+    }}
+}}
+
 const controller = await create_live_glsl_preview({{
     document_ref,
     container_element,
@@ -199,6 +223,18 @@ const controller = await create_live_glsl_preview({{
     input_image,
     preview_state,
     shader_loader: async () => "void main() {{}}",
+    three_stack_loader: async () => ({{
+        THREE: {{
+            ShaderMaterial: FakeShaderMaterial,
+            Vector2: FakeVector2,
+        }},
+        react_three_fiber: {{
+            createRoot: () => ({{ render: () => {{}}, unmount: () => {{}} }}),
+        }},
+        react_three_drei: {{
+            Plane: () => null,
+        }},
+    }}),
     request_animation_frame: () => 1,
 }});
 
@@ -209,6 +245,7 @@ console.log(JSON.stringify({{
     mesh: controller.preview_descriptor.mesh,
     uImage: controller.preview_descriptor.uniforms.u_image,
     hasThreeCanvas: controller.preview_descriptor.three_canvas,
+    hasShaderMaterial: Boolean(controller.preview_descriptor.shader_material),
 }}));
 """
     output = _run_node_module(script)
@@ -218,6 +255,7 @@ console.log(JSON.stringify({{
     assert output["mesh"] == "plane"
     assert output["uImage"] == "image-texture"
     assert output["hasThreeCanvas"] is True
+    assert output["hasShaderMaterial"] is True
 
 
 def test_live_preview_animates_u_time_with_raf_loop():
@@ -503,3 +541,216 @@ console.log(JSON.stringify({{
     output = _run_node_module(script)
     assert output["inlineError"] == "Shader load error: Shader not found: missing_effect"
     assert output["previewError"] == "Shader load error: Shader not found: missing_effect"
+
+
+def test_live_preview_overlay_uses_aria_live_status_semantics():
+    script = f"""
+import {{ create_live_glsl_preview }} from "{WIDGET_URL}";
+
+class FakeElement {{
+    constructor(tagName) {{
+        this.tagName = tagName;
+        this.children = [];
+        this.attributes = {{}};
+        this.textContent = "";
+        this.width = 512;
+        this.height = 512;
+        this.clientWidth = 512;
+        this.clientHeight = 512;
+        this.style = {{}};
+    }}
+    appendChild(child) {{
+        this.children.push(child);
+        return child;
+    }}
+    setAttribute(name, value) {{
+        this.attributes[name] = value;
+    }}
+}}
+
+const document_ref = {{
+    createElement(tagName) {{
+        return new FakeElement(tagName);
+    }},
+}};
+const container_element = new FakeElement("div");
+const controller = await create_live_glsl_preview({{
+    document_ref,
+    container_element,
+    effect_name: "glitch",
+    shader_loader: async () => "void main() {{}}",
+    request_animation_frame: () => 1,
+}});
+
+console.log(JSON.stringify({{
+    ariaLive: controller.overlay_element.attributes["aria-live"],
+    role: controller.overlay_element.attributes.role,
+}}));
+"""
+    output = _run_node_module(script)
+    assert output["ariaLive"] == "polite"
+    assert output["role"] == "status"
+
+
+def test_live_preview_uses_single_global_resize_listener():
+    script = f"""
+import {{ create_live_glsl_preview }} from "{WIDGET_URL}";
+
+class FakeElement {{
+    constructor(tagName) {{
+        this.tagName = tagName;
+        this.children = [];
+        this.attributes = {{}};
+        this.textContent = "";
+        this.width = 512;
+        this.height = 512;
+        this.clientWidth = 512;
+        this.clientHeight = 512;
+        this.style = {{}};
+    }}
+    appendChild(child) {{
+        this.children.push(child);
+        return child;
+    }}
+    setAttribute(name, value) {{
+        this.attributes[name] = value;
+    }}
+}}
+
+let add_count = 0;
+let remove_count = 0;
+globalThis.addEventListener = () => {{
+    add_count += 1;
+}};
+globalThis.removeEventListener = () => {{
+    remove_count += 1;
+}};
+
+const document_ref = {{
+    createElement(tagName) {{
+        return new FakeElement(tagName);
+    }},
+}};
+const container_element = new FakeElement("div");
+const first = await create_live_glsl_preview({{
+    document_ref,
+    container_element,
+    effect_name: "glitch",
+    shader_loader: async () => "void main() {{}}",
+    request_animation_frame: () => 1,
+}});
+const second = await create_live_glsl_preview({{
+    document_ref,
+    container_element,
+    effect_name: "vhs",
+    shader_loader: async () => "void main() {{}}",
+    request_animation_frame: () => 1,
+}});
+
+first.stop();
+second.stop();
+
+console.log(JSON.stringify({{
+    addCount: add_count,
+    removeCount: remove_count,
+}}));
+"""
+    output = _run_node_module(script)
+    assert output["addCount"] == 1
+    assert output["removeCount"] == 1
+
+
+def test_registers_comfy_extension_and_propagates_widget_selection_to_effect_output():
+    script = f"""
+import {{ register_comfy_extension, EXTENSION_NAME }} from "{WIDGET_URL}";
+
+class FakeElement {{
+    constructor(tagName) {{
+        this.tagName = tagName;
+        this.children = [];
+        this.listeners = {{}};
+        this.attributes = {{}};
+        this.value = "";
+        this.textContent = "";
+        this.width = 512;
+        this.height = 512;
+        this.clientWidth = 512;
+        this.clientHeight = 512;
+        this.style = {{}};
+    }}
+    appendChild(child) {{
+        this.children.push(child);
+        return child;
+    }}
+    addEventListener(name, listener) {{
+        this.listeners[name] = listener;
+    }}
+    setAttribute(name, value) {{
+        this.attributes[name] = value;
+    }}
+    dispatchEvent(name) {{
+        if (this.listeners[name]) {{
+            this.listeners[name]();
+        }}
+    }}
+}}
+
+const document_ref = {{
+    createElement(tagName) {{
+        return new FakeElement(tagName);
+    }},
+}};
+
+let captured_extension = null;
+const app_ref = {{
+    registerExtension(extension) {{
+        captured_extension = extension;
+    }},
+}};
+
+register_comfy_extension(app_ref, {{
+    document_ref,
+    shader_names_loader: async () => ["glitch", "vhs"],
+    shader_loader: async () => "void main() {{}}",
+    request_animation_frame: () => 1,
+}});
+
+function NodeType() {{
+    this.widgets = [{{ name: "effect_name", value: "glitch" }}];
+    this.properties = {{}};
+    this.dirty_calls = 0;
+    this.dom_widgets = [];
+}}
+
+NodeType.prototype.addDOMWidget = function addDOMWidget(_name, _type, element) {{
+    this.dom_widgets.push({{ element }});
+    return {{ element }};
+}};
+
+NodeType.prototype.setDirtyCanvas = function setDirtyCanvas() {{
+    this.dirty_calls += 1;
+}};
+
+await captured_extension.beforeRegisterNodeDef(NodeType, {{ name: "CoolEffectSelector" }});
+const node = new NodeType();
+await node.onNodeCreated();
+
+const container = node.dom_widgets[0].element;
+const select_element = container.children[0];
+select_element.value = "vhs";
+select_element.dispatchEvent("change");
+await Promise.resolve();
+
+console.log(JSON.stringify({{
+    extensionName: captured_extension.name,
+    expectedName: EXTENSION_NAME,
+    selectedEffect: node.widgets[0].value,
+    propertyEffect: node.properties.effect_name,
+    dirtyCalls: node.dirty_calls,
+}}));
+"""
+    output = _run_node_module(script)
+    assert output["extensionName"] == output["expectedName"]
+    assert output["selectedEffect"] == "vhs"
+    assert output["propertyEffect"] == "vhs"
+    assert output["dirtyCalls"] >= 1

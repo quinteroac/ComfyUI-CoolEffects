@@ -68,7 +68,7 @@ def test_endpoint_returns_json_with_http_200(monkeypatch):
 
     assert response.status == 200
     assert response.content_type == "application/json"
-    assert json.loads(response.text) == ["glitch", "vhs"]
+    assert json.loads(response.text) == {"shaders": ["glitch", "vhs"]}
 
 
 def test_endpoint_reads_shader_names_at_request_time(monkeypatch):
@@ -83,5 +83,5 @@ def test_endpoint_reads_shader_names_at_request_time(monkeypatch):
     first_response = asyncio.run(module.get_shaders(None))
     second_response = asyncio.run(module.get_shaders(None))
 
-    assert json.loads(first_response.text) == ["glitch"]
-    assert json.loads(second_response.text) == ["glitch", "runtime_added"]
+    assert json.loads(first_response.text) == {"shaders": ["glitch"]}
+    assert json.loads(second_response.text) == {"shaders": ["glitch", "runtime_added"]}

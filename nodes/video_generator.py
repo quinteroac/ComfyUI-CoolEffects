@@ -16,17 +16,7 @@ if _LOADER_SPEC is None or _LOADER_SPEC.loader is None:
 _shader_loader_module = importlib.util.module_from_spec(_LOADER_SPEC)
 _LOADER_SPEC.loader.exec_module(_shader_loader_module)
 load_shader = _shader_loader_module.load_shader
-
-
-_VERTEX_SHADER_SOURCE = """
-#version 330
-in vec2 in_pos;
-out vec2 v_uv;
-void main() {
-    v_uv = (in_pos + 1.0) * 0.5;
-    gl_Position = vec4(in_pos, 0.0, 1.0);
-}
-"""
+load_vertex_shader = _shader_loader_module.load_vertex_shader
 
 _FULLSCREEN_QUAD_VERTICES = np.array(
     [
@@ -86,6 +76,10 @@ class CoolVideoGenerator:
             fragment_shader_source = load_shader(effect_name)
         except FileNotFoundError as error:
             raise ValueError(f"Shader not found for effect_name '{effect_name}'.") from error
+        try:
+            vertex_shader_source = load_vertex_shader("fullscreen_quad")
+        except FileNotFoundError as error:
+            raise ValueError("Vertex shader not found for 'fullscreen_quad'.") from error
 
         import moderngl
 
@@ -102,9 +96,9 @@ class CoolVideoGenerator:
         rendered_frames = []
 
         try:
-            ctx = moderngl.create_standalone_context()
+            ctx = moderngl.create_standalone_context(backend="egl")
             program = ctx.program(
-                vertex_shader=_VERTEX_SHADER_SOURCE,
+                vertex_shader=vertex_shader_source,
                 fragment_shader=fragment_shader_source,
             )
             input_texture = ctx.texture((width, height), 3, source_frame.tobytes())

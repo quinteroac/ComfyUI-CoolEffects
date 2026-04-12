@@ -1,0 +1,27 @@
+# ComfyUI-CoolEffects
+
+ComfyUI-CoolEffects is a custom node package for applying GLSL-driven effects to images in ComfyUI.
+
+## Included nodes
+
+- `CoolEffectSelector`: passes through image and selected effect name.
+- `CoolVideoGenerator`: renders shader-driven frame batches from an input image.
+
+## Shader architecture
+
+- Shared shader files live in `shaders/glsl/*.frag`.
+- Python backend loads shaders through `shaders/loader.py`.
+- Frontend shader list is fetched from `GET /cool_effects/shaders`.
+
+## Development notes
+
+- Place this repository under ComfyUI's `custom_nodes/`.
+- Install dependencies from `requirements.txt`.
+
+## GPU performance validation (US-004-AC05)
+
+To validate the 512x512, 3s, 30fps under-30s requirement on real GPU hardware, run:
+
+`python tests/manual_gpu_benchmark.py --effect-name glitch --width 512 --height 512 --fps 30 --duration 3 --threshold-seconds 30`
+
+The script prints a JSON report and exits non-zero when the run exceeds the threshold.

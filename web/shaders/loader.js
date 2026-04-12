@@ -6,15 +6,18 @@ export async function listShaders() {
         throw new Error(`Failed to list shaders: ${response.status}`);
     }
 
-    return response.json();
+    const payload = await response.json();
+    if (Array.isArray(payload)) {
+        return payload;
+    }
+    if (!payload || !Array.isArray(payload.shaders)) {
+        throw new Error("Invalid shader list payload");
+    }
+    return payload.shaders;
 }
 
 export async function loadShader(name) {
-    const shader_path = new URL(
-        `../../shaders/glsl/${encodeURIComponent(name)}.frag`,
-        import.meta.url,
-    );
-    const response = await fetch(shader_path);
+    const response = await fetch(`/cool_effects/shaders/${encodeURIComponent(name)}`);
     if (!response.ok) {
         throw new Error(`Shader not found: ${name}`);
     }

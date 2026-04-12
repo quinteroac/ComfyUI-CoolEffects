@@ -4,7 +4,7 @@ uniform sampler2D u_image;
 uniform float u_time;
 uniform vec2 u_resolution;
 
-out vec4 frag_color;
+out vec4 fragColor;
 
 void main() {
     vec2 uv = gl_FragCoord.xy / u_resolution;
@@ -17,5 +17,5 @@ void main() {
     float g = texture(u_image, g_uv).g;
     float b = texture(u_image, b_uv).b;
 
-    frag_color = vec4(r, g, b, 1.0);
+    fragColor = vec4(r, g, b, 1.0);
 }

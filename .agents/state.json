@@ -1,6 +1,6 @@
 {
-  "current_iteration": "000001",
-  "current_phase": "prototype",
+  "current_iteration": "000002",
+  "current_phase": "define",
   "phases": {
     "define": {
       "ideation": {
@@ -11,42 +11,16 @@
         {
           "index": 1,
           "status": "approved",
-          "file": "it_000001_product-requirement-document_001.md"
-        },
-        {
-          "index": 2,
-          "status": "approved",
-          "file": "it_000001_product-requirement-document_002.md"
-        },
-        {
-          "index": 3,
-          "status": "approved",
-          "file": "it_000001_product-requirement-document_003.md"
+          "file": "it_000002_product-requirement-document_001.md"
         }
       ],
       "prd_generation": {
         "status": "completed",
-        "file": "it_000001_PRD_003.json"
+        "file": "it_000002_PRD_001.json"
       }
     },
     "prototype": {
-      "prototype_creation": [
-        {
-          "index": 1,
-          "status": "in_progress",
-          "file": "it_000001_prototype-creation_001.json"
-        },
-        {
-          "index": 2,
-          "status": "in_progress",
-          "file": "it_000001_prototype-creation_002.json"
-        },
-        {
-          "index": 3,
-          "status": "in_progress",
-          "file": "it_000001_prototype-creation_003.json"
-        }
-      ],
+      "prototype_creation": [],
       "prototype_audit": [],
       "prototype_refactor": [],
       "prototype_approval": {
@@ -56,10 +30,44 @@
       "project_context": {
         "status": "created",
         "file": ".agents/PROJECT_CONTEXT.md"
-      }
+      },
+      "test_plan": {
+        "status": "pending",
+        "file": null
+      },
+      "tp_generation": {
+        "status": "pending",
+        "file": null
+      },
+      "prototype_build": {
+        "status": "pending",
+        "file": null
+      },
+      "test_execution": {
+        "status": "pending",
+        "file": null
+      },
+      "prototype_approved": false
     },
-    "refactor": {}
+    "refactor": {
+      "evaluation_report": {
+        "status": "pending",
+        "file": null
+      },
+      "refactor_plan": {
+        "status": "pending",
+        "file": null
+      },
+      "refactor_execution": {
+        "status": "pending",
+        "file": null
+      },
+      "changelog": {
+        "status": "pending",
+        "file": null
+      }
+    }
   },
-  "last_updated": "2026-04-12T15:19:47.848Z",
-  "updated_by": "nvst:create-prototype"
+  "last_updated": "2026-04-12T20:39:51.447Z",
+  "updated_by": "nvst:approve-requirement"
 }

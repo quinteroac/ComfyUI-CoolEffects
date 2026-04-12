@@ -5,7 +5,7 @@ import uuid
 from pathlib import Path
 
 import pytest
-import torch
+torch = pytest.importorskip("torch")
 
 
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent
@@ -165,6 +165,7 @@ def test_video_generator_uses_standalone_context_and_frame_time(monkeypatch):
     fake_moderngl = _FakeModerngl()
     monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
     monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
+    monkeypatch.setattr(module, "load_vertex_shader", lambda _name: "vertex-source")
 
     node = module.CoolVideoGenerator()
     image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
@@ -172,8 +173,15 @@ def test_video_generator_uses_standalone_context_and_frame_time(monkeypatch):
     output, = node.execute(image=image, effect_name="glitch", fps=4, duration=1.0)
 
     assert fake_moderngl.create_calls == 1
+    assert fake_moderngl.latest_context.vertex_shader == "vertex-source"
+    assert fake_moderngl.latest_context.fragment_shader == "shader-source"
     assert fake_moderngl.latest_context.vertex_array_object.rendered_times == [0.0, 0.25, 0.5, 0.75]
     assert output.shape == (4, 2, 3, 3)
+
+
+def test_video_generator_has_no_inline_glsl_constant():
+    module = _load_module(NODE_PATH)
+    assert not hasattr(module, "_VERTEX_SHADER_SOURCE")
 
 
 def test_video_generator_input_types_expose_fps_and_duration_widgets():

@@ -28,20 +28,29 @@ _effect_selector_module = _load_module_from_path(
 )
 CoolEffectSelector = _effect_selector_module.CoolEffectSelector
 
-_video_generator_module = _load_module_from_path(
-    "cool_effects_video_generator_runtime",
-    PACKAGE_ROOT / "nodes" / "video_generator.py",
-)
-CoolVideoGenerator = _video_generator_module.CoolVideoGenerator
+_video_generator_import_error = None
+try:
+    _video_generator_module = _load_module_from_path(
+        "cool_effects_video_generator_runtime",
+        PACKAGE_ROOT / "nodes" / "video_generator.py",
+    )
+except ModuleNotFoundError as error:
+    _video_generator_module = None
+    _video_generator_import_error = error
+    CoolVideoGenerator = None
+else:
+    CoolVideoGenerator = _video_generator_module.CoolVideoGenerator
 
 NODE_CLASS_MAPPINGS = {
     "CoolEffectSelector": CoolEffectSelector,
-    "CoolVideoGenerator": CoolVideoGenerator,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     "CoolEffectSelector": "Cool Effect Selector",
-    "CoolVideoGenerator": "Cool Video Generator",
 }
+
+if CoolVideoGenerator is not None:
+    NODE_CLASS_MAPPINGS["CoolVideoGenerator"] = CoolVideoGenerator
+    NODE_DISPLAY_NAME_MAPPINGS["CoolVideoGenerator"] = "Cool Video Generator"
 
 
 class _JsonResponseFallback:
@@ -51,8 +60,11 @@ class _JsonResponseFallback:
         self.text = json.dumps(payload)
 
 
+_SHADERS_DIR = PACKAGE_ROOT / "shaders" / "glsl"
+
+
 async def get_shaders(_request):
-    payload = list_shaders()
+    payload = {"shaders": list_shaders()}
 
     try:
         from aiohttp import web
@@ -60,6 +72,29 @@ async def get_shaders(_request):
         return _JsonResponseFallback(payload)
 
     return web.json_response(payload)
+
+
+async def get_shader(request):
+    name = request.match_info.get("name", "")
+    shader_path = _SHADERS_DIR / f"{name}.frag"
+
+    try:
+        from aiohttp import web
+    except ImportError:
+
+        class _TextResponse:
+            def __init__(self, text, status=200):
+                self.status = status
+                self.content_type = "text/plain"
+                self.text = text
+
+        if not shader_path.exists():
+            return _TextResponse(f"Shader not found: {name}", status=404)
+        return _TextResponse(shader_path.read_text(encoding="utf-8"))
+
+    if not shader_path.exists():
+        raise web.HTTPNotFound(reason=f"Shader not found: {name}")
+    return web.Response(text=shader_path.read_text(encoding="utf-8"), content_type="text/plain")
 
 
 def _register_routes() -> None:
@@ -81,6 +116,7 @@ def _register_routes() -> None:
         return
 
     routes.get("/cool_effects/shaders")(get_shaders)
+    routes.get("/cool_effects/shaders/{name}")(get_shader)
     setattr(routes, "_cool_effects_shader_list_registered", True)
 
 

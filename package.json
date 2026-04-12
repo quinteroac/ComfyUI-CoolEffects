@@ -1,0 +1,7 @@
+{
+  "name": "comfyui-cooleffects",
+  "private": true,
+  "scripts": {
+    "typecheck": "echo \"No TypeScript files to typecheck.\""
+  }
+}

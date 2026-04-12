@@ -31,7 +31,7 @@ globalThis.fetch = async (url) => {{
         ok: true,
         status: 200,
         async json() {{
-            return ["glitch", "vhs"];
+            return {{ shaders: ["glitch", "vhs"] }};
         }},
     }};
 }};
@@ -62,6 +62,29 @@ console.log(JSON.stringify({{ message }}));
 
     output = _run_node_module(script)
     assert output["message"] == "Failed to list shaders: 503"
+
+
+def test_list_shaders_throws_error_for_invalid_payload_shape():
+    script = f"""
+import {{ listShaders }} from "{WEB_LOADER_URL}";
+globalThis.fetch = async () => ({{
+    ok: true,
+    status: 200,
+    async json() {{
+        return {{}};
+    }},
+}});
+let message = "";
+try {{
+    await listShaders();
+}} catch (error) {{
+    message = error.message;
+}}
+console.log(JSON.stringify({{ message }}));
+"""
+
+    output = _run_node_module(script)
+    assert output["message"] == "Invalid shader list payload"
 
 
 def test_load_shader_fetches_frag_file_and_returns_source():

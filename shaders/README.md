@@ -8,6 +8,10 @@ All fragment shaders in `shaders/glsl/` must compile in ModernGL and expose the 
 - `uniform float u_time` — animation time in seconds
 - `uniform vec2 u_resolution` — output resolution in pixels
 
+## Output variable
+
+- Use `out vec4 fragColor` for fragment output.
+
 ## File naming
 
 - Use lowercase snake_case names
