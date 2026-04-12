@@ -123,7 +123,8 @@ class CoolVideoGenerator:
                 vao.render(moderngl.TRIANGLES)
                 frame_bytes = fbo.read(components=3)
                 frame_array = np.frombuffer(frame_bytes, dtype=np.uint8).reshape(height, width, 3)
-                rendered_frames.append(torch.from_numpy(frame_array.astype(np.float32) / 255.0))
+                frame_normalized = frame_array.astype(np.float32) / np.float32(255.0)
+                rendered_frames.append(torch.from_numpy(frame_normalized))
 
             if rendered_frames:
                 output = torch.stack(rendered_frames, dim=0)

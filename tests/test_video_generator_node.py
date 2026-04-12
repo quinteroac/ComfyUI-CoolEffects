@@ -69,13 +69,18 @@ class _FakeFramebuffer:
         self.texture = texture
         self.released = False
         self.use_calls = 0
+        self.read_components = []
+        self.read_count = 0
 
     def use(self):
         self.use_calls += 1
 
     def read(self, components):
+        self.read_components.append(components)
         width, height = self.texture.size
-        return bytes(width * height * components)
+        frame_value = self.read_count % 256
+        self.read_count += 1
+        return bytes([frame_value]) * (width * height * components)
 
     def release(self):
         self.released = True
@@ -167,6 +172,80 @@ def test_video_generator_uses_standalone_context_and_frame_time(monkeypatch):
     assert fake_moderngl.create_calls == 1
     assert fake_moderngl.latest_context.vertex_array_object.rendered_times == [0.0, 0.25, 0.5, 0.75]
     assert output.shape == (4, 2, 3, 3)
+
+
+def test_video_generator_reads_rgb_bytes_per_frame(monkeypatch):
+    module = _load_module(NODE_PATH)
+    fake_moderngl = _FakeModerngl()
+    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
+    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
+
+    node = module.CoolVideoGenerator()
+    image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
+    node.execute(image=image, effect_name="glitch", fps=3, duration=1.0)
+
+    framebuffer = fake_moderngl.latest_context.framebuffer_object
+    assert framebuffer.read_components == [3, 3, 3]
+
+
+def test_video_generator_returns_float32_image_batch_tensor(monkeypatch):
+    module = _load_module(NODE_PATH)
+    fake_moderngl = _FakeModerngl()
+    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
+    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
+
+    node = module.CoolVideoGenerator()
+    image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
+    output, = node.execute(image=image, effect_name="glitch", fps=2, duration=1.0)
+
+    assert output.shape == (2, 2, 3, 3)
+    assert output.dtype == torch.float32
+    assert output.min().item() >= 0.0
+    assert output.max().item() <= 1.0
+
+
+def test_video_generator_returns_image_output(monkeypatch):
+    module = _load_module(NODE_PATH)
+    fake_moderngl = _FakeModerngl()
+    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
+    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
+
+    node = module.CoolVideoGenerator()
+    image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
+    result = node.execute(image=image, effect_name="glitch", fps=1, duration=1.0)
+
+    assert module.CoolVideoGenerator.RETURN_TYPES == ("IMAGE",)
+    assert isinstance(result, tuple)
+    assert len(result) == 1
+    assert isinstance(result[0], torch.Tensor)
+
+
+def test_video_generator_outputs_90_frames_for_3s_at_30fps(monkeypatch):
+    module = _load_module(NODE_PATH)
+    fake_moderngl = _FakeModerngl()
+    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
+    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
+
+    node = module.CoolVideoGenerator()
+    image = torch.ones((1, 4, 5, 3), dtype=torch.float32)
+    output, = node.execute(image=image, effect_name="glitch", fps=30, duration=3.0)
+
+    assert output.shape == (90, 4, 5, 3)
+
+
+def test_video_generator_output_is_preview_image_compatible(monkeypatch):
+    module = _load_module(NODE_PATH)
+    fake_moderngl = _FakeModerngl()
+    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
+    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
+
+    node = module.CoolVideoGenerator()
+    image = torch.ones((1, 2, 2, 3), dtype=torch.float32)
+    output, = node.execute(image=image, effect_name="glitch", fps=3, duration=1.0)
+
+    preview_frames = [output[frame_index] for frame_index in range(output.shape[0])]
+    assert len(preview_frames) == 3
+    assert all(frame.shape == (2, 2, 3) for frame in preview_frames)
 
 
 def test_video_generator_binds_u_image_texture_and_resolution(monkeypatch):
