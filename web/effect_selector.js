@@ -135,14 +135,25 @@ export async function create_live_glsl_preview({
         input_image,
         canvas_element,
     });
+    preview_state.preview_error = "";
+
+    const update_overlay_message = () => {
+        if (preview_state.preview_error) {
+            overlay_element.textContent = preview_state.preview_error;
+            return;
+        }
+        overlay_element.textContent = preview_descriptor.uniforms.u_image
+            ? ""
+            : "Connect an image to preview this effect.";
+    };
 
     try {
         preview_descriptor.fragment_shader_source = await shader_loader(
             safe_effect_name,
         );
+        preview_state.preview_error = "";
     } catch (error) {
-        overlay_element.textContent = `Shader load error: ${error.message}`;
-        preview_state.preview_error = overlay_element.textContent;
+        preview_state.preview_error = `Shader load error: ${error.message}`;
     }
 
     const update_resolution = () => {
@@ -159,11 +170,10 @@ export async function create_live_glsl_preview({
 
     if (input_image) {
         canvas_element.style.background = "transparent";
-        overlay_element.textContent = "";
     } else {
         canvas_element.style.background = "rgb(128, 128, 128)";
-        overlay_element.textContent = "Connect an image to preview this effect.";
     }
+    update_overlay_message();
 
     let animation_handle = null;
     let stopped = false;
@@ -185,23 +195,20 @@ export async function create_live_glsl_preview({
             canvas_element.style.background = next_image
                 ? "transparent"
                 : "rgb(128, 128, 128)";
-            overlay_element.textContent = next_image
-                ? ""
-                : "Connect an image to preview this effect.";
+            update_overlay_message();
         },
         async set_effect(next_effect_name) {
             preview_descriptor.effect_name = next_effect_name;
             preview_state.effect_name = next_effect_name;
-            overlay_element.textContent = "";
             try {
                 preview_descriptor.fragment_shader_source = await shader_loader(
                     next_effect_name,
                 );
                 preview_state.preview_error = "";
             } catch (error) {
-                overlay_element.textContent = `Shader load error: ${error.message}`;
-                preview_state.preview_error = overlay_element.textContent;
+                preview_state.preview_error = `Shader load error: ${error.message}`;
             }
+            update_overlay_message();
         },
         resize(width, height) {
             if (Number(width) > 0) {

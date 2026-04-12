@@ -29,3 +29,13 @@
 **Pitfalls Encountered:** The environment lacks `pytest`, so full suite execution could not run locally in this session.
 
 **Useful Context for Future Agents:** Existing selector tests already cover registration and execute semantics; when extending selector behavior, keep assertions around class-level ComfyUI contracts since these are the integration surface for downstream nodes.
+
+## US-004 — Shader Loading in Frontend
+
+**Summary:** Updated `web/effect_selector.js` so preview shader loading and overlay text handling are driven by `loadShader(effectName)` semantics, and added widget tests proving default JS shader-loader usage and inline error rendering when shader fetch fails.
+
+**Key Decisions:** Centralized overlay messaging with `update_overlay_message()` so shader-load errors always take precedence over placeholder copy; kept loader injection support for tests/extensibility while validating the default path that uses the shared `web/shaders/loader.js`.
+
+**Pitfalls Encountered:** The prior flow could overwrite shader-load errors with the “Connect an image” placeholder when no input image was present; this hid actionable errors and violated the story’s inline error requirement.
+
+**Useful Context for Future Agents:** For frontend ACs in this repo, Node-executed fake-DOM tests are the current validation pattern; if adding more error states, route all overlay text through one resolver to avoid state-order regressions.

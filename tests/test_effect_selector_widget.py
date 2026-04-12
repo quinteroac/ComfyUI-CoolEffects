@@ -384,3 +384,122 @@ console.log(JSON.stringify({{
     assert output["background"] == "rgb(128, 128, 128)"
     assert output["hasError"] is False
     assert output["uImage"] is None
+
+
+def test_live_preview_uses_default_js_load_shader_for_effect_source():
+    script = f"""
+import {{ create_live_glsl_preview }} from "{WIDGET_URL}";
+
+class FakeElement {{
+    constructor(tagName) {{
+        this.tagName = tagName;
+        this.children = [];
+        this.attributes = {{}};
+        this.textContent = "";
+        this.width = 512;
+        this.height = 512;
+        this.clientWidth = 512;
+        this.clientHeight = 512;
+        this.style = {{}};
+    }}
+    appendChild(child) {{
+        this.children.push(child);
+        return child;
+    }}
+    setAttribute(name, value) {{
+        this.attributes[name] = value;
+    }}
+}}
+
+let requested_url = "";
+globalThis.fetch = async (url) => {{
+    requested_url = String(url);
+    return {{
+        ok: true,
+        status: 200,
+        async text() {{
+            return "shader-source";
+        }},
+    }};
+}};
+
+const document_ref = {{
+    createElement(tagName) {{
+        return new FakeElement(tagName);
+    }},
+}};
+const container_element = new FakeElement("div");
+
+const controller = await create_live_glsl_preview({{
+    document_ref,
+    container_element,
+    effect_name: "vhs",
+    input_image: "image-texture",
+    request_animation_frame: () => 1,
+}});
+
+console.log(JSON.stringify({{
+    requestedUrl: requested_url,
+    fragmentShaderSource: controller.preview_descriptor.fragment_shader_source,
+}}));
+"""
+    output = _run_node_module(script)
+    assert output["requestedUrl"].endswith("/shaders/glsl/vhs.frag")
+    assert output["fragmentShaderSource"] == "shader-source"
+
+
+def test_live_preview_shows_inline_error_when_shader_load_fails():
+    script = f"""
+import {{ create_live_glsl_preview }} from "{WIDGET_URL}";
+
+class FakeElement {{
+    constructor(tagName) {{
+        this.tagName = tagName;
+        this.children = [];
+        this.attributes = {{}};
+        this.textContent = "";
+        this.width = 512;
+        this.height = 512;
+        this.clientWidth = 512;
+        this.clientHeight = 512;
+        this.style = {{}};
+    }}
+    appendChild(child) {{
+        this.children.push(child);
+        return child;
+    }}
+    setAttribute(name, value) {{
+        this.attributes[name] = value;
+    }}
+}}
+
+globalThis.fetch = async () => ({{
+    ok: false,
+    status: 404,
+}});
+
+const document_ref = {{
+    createElement(tagName) {{
+        return new FakeElement(tagName);
+    }},
+}};
+const container_element = new FakeElement("div");
+const preview_state = {{}};
+
+const controller = await create_live_glsl_preview({{
+    document_ref,
+    container_element,
+    effect_name: "missing_effect",
+    input_image: null,
+    preview_state,
+    request_animation_frame: () => 1,
+}});
+
+console.log(JSON.stringify({{
+    inlineError: controller.overlay_element.textContent,
+    previewError: preview_state.preview_error,
+}}));
+"""
+    output = _run_node_module(script)
+    assert output["inlineError"] == "Shader load error: Shader not found: missing_effect"
+    assert output["previewError"] == "Shader load error: Shader not found: missing_effect"
