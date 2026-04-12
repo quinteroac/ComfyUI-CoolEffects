@@ -4,18 +4,32 @@ import importlib.util
 import json
 from pathlib import Path
 
-NODE_CLASS_MAPPINGS = {}
-NODE_DISPLAY_NAME_MAPPINGS = {}
+PACKAGE_ROOT = Path(__file__).parent
+WEB_DIRECTORY = "web"
 
-_SHADER_LOADER_PATH = Path(__file__).parent / "shaders" / "loader.py"
-_SHADER_LOADER_SPEC = importlib.util.spec_from_file_location(
-    "cool_effects_shader_loader_runtime", _SHADER_LOADER_PATH
+
+def _load_module_from_path(module_name: str, module_path: Path):
+    module_spec = importlib.util.spec_from_file_location(module_name, module_path)
+    if module_spec is None or module_spec.loader is None:
+        raise ValueError(f"Missing module config at {module_path}")
+    module = importlib.util.module_from_spec(module_spec)
+    module_spec.loader.exec_module(module)
+    return module
+
+
+_shader_loader_module = _load_module_from_path(
+    "cool_effects_shader_loader_runtime", PACKAGE_ROOT / "shaders" / "loader.py"
 )
-if _SHADER_LOADER_SPEC is None or _SHADER_LOADER_SPEC.loader is None:
-    raise ValueError(f"Missing shader loader config at {_SHADER_LOADER_PATH}")
-_shader_loader_module = importlib.util.module_from_spec(_SHADER_LOADER_SPEC)
-_SHADER_LOADER_SPEC.loader.exec_module(_shader_loader_module)
 list_shaders = _shader_loader_module.list_shaders
+
+_effect_selector_module = _load_module_from_path(
+    "cool_effects_effect_selector_runtime",
+    PACKAGE_ROOT / "nodes" / "effect_selector.py",
+)
+CoolEffectSelector = _effect_selector_module.CoolEffectSelector
+
+NODE_CLASS_MAPPINGS = {"CoolEffectSelector": CoolEffectSelector}
+NODE_DISPLAY_NAME_MAPPINGS = {"CoolEffectSelector": "Cool Effect Selector"}
 
 
 class _JsonResponseFallback:
