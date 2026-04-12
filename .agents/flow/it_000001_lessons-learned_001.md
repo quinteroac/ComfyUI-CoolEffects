@@ -29,3 +29,13 @@
 **Pitfalls Encountered:** The environment still lacks a runnable pytest installation (`python3 -m pytest` unavailable, `pip`/`ensurepip` unavailable), so verification could not be executed with the normal test runner.
 
 **Useful Context for Future Agents:** For ComfyUI route tests, injecting a temporary `server` module into `sys.modules` with a fake `PromptServer.instance.routes.get` decorator works well to verify import-time registration without requiring a live Comfy runtime.
+
+## US-004 — JavaScript Shader Loader
+
+**Summary:** Added `web/shaders/loader.js` exporting async `listShaders()` and `loadShader(name)` for frontend reuse, plus tests that validate fetch URLs, successful payload handling, and required error messages for non-200 responses.
+
+**Key Decisions:** Used `new URL("../../shaders/glsl/<name>.frag", import.meta.url)` so shader file resolution is tied to module location rather than runtime CWD or hardcoded extension paths; kept error messages exactly aligned to the story AC text.
+
+**Pitfalls Encountered:** JavaScript behavior is easiest to verify through Node ESM subprocess tests from pytest, but this environment still lacks a runnable pytest module, so only direct module import sanity checks could be executed here.
+
+**Useful Context for Future Agents:** The JS loader now centralizes both endpoint listing and GLSL source loading; frontend widgets can import from `../shaders/loader.js` and avoid duplicate fetch/error logic.
