@@ -19,3 +19,13 @@
 **Pitfalls Encountered:** `pytest` was not available as a direct shell command in this environment, so test execution should use `python3 -m pytest` when the pytest module is installed.
 
 **Useful Context for Future Agents:** The shader loader intentionally has no CWD dependence; tests use `monkeypatch.chdir(tmp_path)` to enforce this and can be reused for future filesystem-related utilities.
+
+## US-003 — Shader List Endpoint
+
+**Summary:** Added a package-import-time route registration for `GET /cool_effects/shaders`, implemented an async JSON endpoint handler backed by `list_shaders()`, and added endpoint-focused tests for registration, response metadata, and runtime freshness.
+
+**Key Decisions:** Kept import-by-path loading for the shader loader in `__init__.py` so behavior remains stable regardless of package name/import mode; made route registration idempotent with a guard flag on `PromptServer.instance.routes`; resolved endpoint output at request time by calling `list_shaders()` inside the handler.
+
+**Pitfalls Encountered:** The environment still lacks a runnable pytest installation (`python3 -m pytest` unavailable, `pip`/`ensurepip` unavailable), so verification could not be executed with the normal test runner.
+
+**Useful Context for Future Agents:** For ComfyUI route tests, injecting a temporary `server` module into `sys.modules` with a fake `PromptServer.instance.routes.get` decorator works well to verify import-time registration without requiring a live Comfy runtime.
