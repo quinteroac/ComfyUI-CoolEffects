@@ -352,6 +352,14 @@ export function create_webgl2_renderer(canvas_element) {
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     };
 
+    const set_uniform = (name, value) => {
+        if (!program) return;
+        const uniform_location = gl.getUniformLocation(program, name);
+        if (uniform_location === null) return;
+        gl.useProgram(program);
+        gl.uniform1f(uniform_location, value);
+    };
+
     const render = (time_secs) => {
         if (!program) return;
         const w = canvas_element.width;
@@ -380,7 +388,14 @@ export function create_webgl2_renderer(canvas_element) {
     // Load fallback shader so canvas renders immediately
     build_program(WEBGL2_FALLBACK_FRAGMENT);
 
-    return { set_fragment_shader, set_image_texture, render, dispose, gl };
+    return {
+        set_fragment_shader,
+        set_image_texture,
+        set_uniform,
+        render,
+        dispose,
+        gl,
+    };
 }
 
 export async function create_live_glsl_preview({

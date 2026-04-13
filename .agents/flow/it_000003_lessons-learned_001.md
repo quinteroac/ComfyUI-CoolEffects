@@ -39,3 +39,13 @@
 **Pitfalls Encountered:** Repository-wide pytest still includes unrelated existing frontend test failures, so story validation used the targeted shader test module.
 
 **Useful Context for Future Agents:** Use `uv run --no-project --with pytest pytest -q tests/test_initial_shaders.py` in this environment; the local Python toolchain lacks direct `pytest`/`pip`, and this command reliably runs shader contract tests.
+
+## US-005 — WebGL2 renderer set_uniform method
+
+**Summary:** Added `set_uniform(name, value)` to `create_webgl2_renderer` in `web/effect_selector.js`, with safe no-op behavior when the program or uniform is unavailable, and added focused JS-module tests in `tests/test_effect_selector_widget.py` for API exposure and uniform update behavior.
+
+**Key Decisions:** Kept existing renderer methods untouched and implemented `set_uniform` as a narrow addition that resolves the uniform location at call time, only calling `uniform1f` when `getUniformLocation` returns a non-null location.
+
+**Pitfalls Encountered:** Full-suite pytest still contains unrelated pre-existing frontend test failures in this repo; story validation depended on targeted renderer tests rather than suite-wide green status.
+
+**Useful Context for Future Agents:** For renderer-specific frontend behavior, use targeted Node-backed pytest cases in `tests/test_effect_selector_widget.py` (via `uv run --no-project --with pytest pytest -q <test selectors>`) to avoid noise from unrelated baseline failures.

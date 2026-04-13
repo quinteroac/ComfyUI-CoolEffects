@@ -912,3 +912,266 @@ console.log(JSON.stringify({{
     assert output["selectedEffect"] == "vhs"
     assert output["propertyEffect"] == "vhs"
     assert output["dirtyCalls"] >= 1
+
+
+def test_webgl2_renderer_exposes_set_uniform_and_existing_methods():
+    script = f"""
+import {{ create_webgl2_renderer }} from "{WIDGET_URL}";
+
+class FakeGL {{
+    constructor() {{
+        this.ARRAY_BUFFER = 34962;
+        this.STATIC_DRAW = 35044;
+        this.VERTEX_SHADER = 35633;
+        this.FRAGMENT_SHADER = 35632;
+        this.COMPILE_STATUS = 35713;
+        this.LINK_STATUS = 35714;
+        this.TEXTURE_2D = 3553;
+        this.RGBA = 6408;
+        this.UNSIGNED_BYTE = 5121;
+        this.TEXTURE_MIN_FILTER = 10241;
+        this.LINEAR_MIPMAP_LINEAR = 9987;
+        this.TEXTURE_WRAP_S = 10242;
+        this.TEXTURE_WRAP_T = 10243;
+        this.CLAMP_TO_EDGE = 33071;
+        this.TEXTURE0 = 33984;
+        this.FLOAT = 5126;
+        this.TRIANGLE_STRIP = 5;
+        this.drawCount = 0;
+    }}
+    createBuffer() {{ return {{ kind: "buffer" }}; }}
+    bindBuffer() {{}}
+    bufferData() {{}}
+    createShader(type) {{ return {{ type }}; }}
+    shaderSource() {{}}
+    compileShader() {{}}
+    getShaderParameter() {{ return true; }}
+    getShaderInfoLog() {{ return ""; }}
+    deleteShader() {{}}
+    createProgram() {{ return {{ kind: "program" }}; }}
+    attachShader() {{}}
+    linkProgram() {{}}
+    getProgramParameter() {{ return true; }}
+    getProgramInfoLog() {{ return ""; }}
+    deleteProgram() {{}}
+    useProgram() {{}}
+    getAttribLocation() {{ return 0; }}
+    getUniformLocation(_program, name) {{
+        return {{ name }};
+    }}
+    createTexture() {{ return {{ kind: "texture" }}; }}
+    deleteTexture() {{}}
+    bindTexture() {{}}
+    texImage2D() {{}}
+    generateMipmap() {{}}
+    texParameteri() {{}}
+    viewport() {{}}
+    enableVertexAttribArray() {{}}
+    vertexAttribPointer() {{}}
+    uniform1f() {{}}
+    uniform2f() {{}}
+    activeTexture() {{}}
+    uniform1i() {{}}
+    drawArrays() {{
+        this.drawCount += 1;
+    }}
+    deleteBuffer() {{}}
+}}
+
+const canvas_element = {{
+    width: 256,
+    height: 256,
+    getContext(kind) {{
+        if (kind === "webgl2") return new FakeGL();
+        return null;
+    }},
+}};
+const renderer = create_webgl2_renderer(canvas_element);
+renderer.set_fragment_shader("out vec4 fragColor; void main() {{ fragColor = vec4(1.0); }}");
+renderer.set_image_texture({{ tagName: "img" }});
+renderer.render(1.5);
+renderer.dispose();
+console.log(JSON.stringify({{
+    hasSetUniform: typeof renderer.set_uniform === "function",
+    hasSetFragmentShader: typeof renderer.set_fragment_shader === "function",
+    hasSetImageTexture: typeof renderer.set_image_texture === "function",
+    hasRender: typeof renderer.render === "function",
+    hasDispose: typeof renderer.dispose === "function",
+    drawCount: renderer.gl.drawCount,
+}}));
+"""
+    output = _run_node_module(script)
+    assert output["hasSetUniform"] is True
+    assert output["hasSetFragmentShader"] is True
+    assert output["hasSetImageTexture"] is True
+    assert output["hasRender"] is True
+    assert output["hasDispose"] is True
+    assert output["drawCount"] == 1
+
+
+def test_webgl2_renderer_set_uniform_updates_existing_uniform_only():
+    script = f"""
+import {{ create_webgl2_renderer }} from "{WIDGET_URL}";
+
+class FakeGL {{
+    constructor() {{
+        this.ARRAY_BUFFER = 34962;
+        this.STATIC_DRAW = 35044;
+        this.VERTEX_SHADER = 35633;
+        this.FRAGMENT_SHADER = 35632;
+        this.COMPILE_STATUS = 35713;
+        this.LINK_STATUS = 35714;
+        this.TEXTURE_2D = 3553;
+        this.RGBA = 6408;
+        this.UNSIGNED_BYTE = 5121;
+        this.TEXTURE_MIN_FILTER = 10241;
+        this.LINEAR_MIPMAP_LINEAR = 9987;
+        this.TEXTURE_WRAP_S = 10242;
+        this.TEXTURE_WRAP_T = 10243;
+        this.CLAMP_TO_EDGE = 33071;
+        this.TEXTURE0 = 33984;
+        this.FLOAT = 5126;
+        this.TRIANGLE_STRIP = 5;
+        this.uniformCalls = [];
+        this.uniformLookups = [];
+    }}
+    createBuffer() {{ return {{ kind: "buffer" }}; }}
+    bindBuffer() {{}}
+    bufferData() {{}}
+    createShader(type) {{ return {{ type }}; }}
+    shaderSource() {{}}
+    compileShader() {{}}
+    getShaderParameter() {{ return true; }}
+    getShaderInfoLog() {{ return ""; }}
+    deleteShader() {{}}
+    createProgram() {{ return {{ kind: "program" }}; }}
+    attachShader() {{}}
+    linkProgram() {{}}
+    getProgramParameter() {{ return true; }}
+    getProgramInfoLog() {{ return ""; }}
+    deleteProgram() {{}}
+    useProgram() {{}}
+    getAttribLocation() {{ return 0; }}
+    getUniformLocation(_program, name) {{
+        this.uniformLookups.push(name);
+        if (name === "u_speed") return {{ name }};
+        return null;
+    }}
+    createTexture() {{ return {{ kind: "texture" }}; }}
+    deleteTexture() {{}}
+    bindTexture() {{}}
+    texImage2D() {{}}
+    generateMipmap() {{}}
+    texParameteri() {{}}
+    viewport() {{}}
+    enableVertexAttribArray() {{}}
+    vertexAttribPointer() {{}}
+    uniform1f(location, value) {{
+        this.uniformCalls.push({{ location: location.name, value }});
+    }}
+    uniform2f() {{}}
+    activeTexture() {{}}
+    uniform1i() {{}}
+    drawArrays() {{}}
+    deleteBuffer() {{}}
+}}
+
+const canvas_element = {{
+    width: 256,
+    height: 256,
+    getContext(kind) {{
+        if (kind === "webgl2") return new FakeGL();
+        return null;
+    }},
+}};
+const renderer = create_webgl2_renderer(canvas_element);
+renderer.set_uniform("u_speed", 2.25);
+renderer.set_uniform("u_missing", 3.5);
+console.log(JSON.stringify({{
+    uniformLookups: renderer.gl.uniformLookups,
+    uniformCalls: renderer.gl.uniformCalls,
+}}));
+"""
+    output = _run_node_module(script)
+    assert output["uniformLookups"][-2:] == ["u_speed", "u_missing"]
+    assert output["uniformCalls"] == [{"location": "u_speed", "value": 2.25}]
+
+
+def test_webgl2_renderer_set_uniform_does_not_throw_when_program_is_null():
+    script = f"""
+import {{ create_webgl2_renderer }} from "{WIDGET_URL}";
+
+class FakeGL {{
+    constructor() {{
+        this.ARRAY_BUFFER = 34962;
+        this.STATIC_DRAW = 35044;
+        this.VERTEX_SHADER = 35633;
+        this.FRAGMENT_SHADER = 35632;
+        this.COMPILE_STATUS = 35713;
+        this.LINK_STATUS = 35714;
+        this.TEXTURE_2D = 3553;
+        this.RGBA = 6408;
+        this.UNSIGNED_BYTE = 5121;
+        this.TEXTURE_MIN_FILTER = 10241;
+        this.LINEAR_MIPMAP_LINEAR = 9987;
+        this.TEXTURE_WRAP_S = 10242;
+        this.TEXTURE_WRAP_T = 10243;
+        this.CLAMP_TO_EDGE = 33071;
+        this.TEXTURE0 = 33984;
+        this.FLOAT = 5126;
+        this.TRIANGLE_STRIP = 5;
+    }}
+    createBuffer() {{ return {{ kind: "buffer" }}; }}
+    bindBuffer() {{}}
+    bufferData() {{}}
+    createShader(type) {{ return {{ type }}; }}
+    shaderSource() {{}}
+    compileShader() {{}}
+    getShaderParameter() {{ return true; }}
+    getShaderInfoLog() {{ return ""; }}
+    deleteShader() {{}}
+    createProgram() {{ return null; }}
+    attachShader() {{}}
+    linkProgram() {{}}
+    getProgramParameter() {{ return true; }}
+    getProgramInfoLog() {{ return ""; }}
+    deleteProgram() {{}}
+    useProgram() {{}}
+    getAttribLocation() {{ return -1; }}
+    getUniformLocation() {{ return null; }}
+    createTexture() {{ return {{ kind: "texture" }}; }}
+    deleteTexture() {{}}
+    bindTexture() {{}}
+    texImage2D() {{}}
+    generateMipmap() {{}}
+    texParameteri() {{}}
+    viewport() {{}}
+    enableVertexAttribArray() {{}}
+    vertexAttribPointer() {{}}
+    uniform1f() {{}}
+    uniform2f() {{}}
+    activeTexture() {{}}
+    uniform1i() {{}}
+    drawArrays() {{}}
+    deleteBuffer() {{}}
+}}
+
+const canvas_element = {{
+    width: 256,
+    height: 256,
+    getContext(kind) {{
+        if (kind === "webgl2") return new FakeGL();
+        return null;
+    }},
+}};
+const renderer = create_webgl2_renderer(canvas_element);
+let threw = false;
+try {{
+    renderer.set_uniform("u_speed", 1.0);
+}} catch (_error) {{
+    threw = true;
+}}
+console.log(JSON.stringify({{ threw }}));
+"""
+    output = _run_node_module(script)
+    assert output["threw"] is False
