@@ -34,6 +34,12 @@ _glitch_effect_module = _load_module_from_path(
 )
 CoolGlitchEffect = _glitch_effect_module.CoolGlitchEffect
 
+_vhs_effect_module = _load_module_from_path(
+    "cool_effects_vhs_effect_runtime",
+    PACKAGE_ROOT / "nodes" / "vhs_effect.py",
+)
+CoolVHSEffect = _vhs_effect_module.CoolVHSEffect
+
 _video_generator_import_error = None
 try:
     _video_generator_module = _load_module_from_path(
@@ -50,10 +56,12 @@ else:
 NODE_CLASS_MAPPINGS = {
     "CoolEffectSelector": CoolEffectSelector,
     "CoolGlitchEffect": CoolGlitchEffect,
+    "CoolVHSEffect": CoolVHSEffect,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     "CoolEffectSelector": "Cool Effect Selector",
     "CoolGlitchEffect": "Cool Glitch Effect",
+    "CoolVHSEffect": "Cool VHS Effect",
 }
 
 if CoolVideoGenerator is not None:

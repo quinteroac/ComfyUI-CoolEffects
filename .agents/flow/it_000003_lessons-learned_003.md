@@ -9,3 +9,13 @@
 **Pitfalls Encountered:** Local environment did not have `pip`/`pytest` preinstalled globally, so test execution required a temporary virtual environment; this was kept out of repository changes.
 
 **Useful Context for Future Agents:** The full suite currently contains pre-existing JS widget/loader expectation mismatches unrelated to this story; focused tests for `test_glitch_effect_node.py` and `test_glitch_effect_widget.py` validate US-001 acceptance criteria cleanly.
+
+## US-002 — CoolVHSEffect node
+
+**Summary:** Added `CoolVHSEffect` with native VHS parameter controls, `EFFECT_PARAMS` output wiring, package registration, and a dedicated frontend extension that mounts a live animated `vhs.frag` preview using the placeholder texture.
+
+**Key Decisions:** Mirrored the existing `CoolGlitchEffect` backend/frontend patterns for consistency: dynamic loading of `build_effect_params`, matching Comfy node metadata (`CATEGORY`, `RETURN_TYPES`, `RETURN_NAMES`), and a focused `web/vhs_effect.js` extension that only activates for `CoolVHSEffect`.
+
+**Pitfalls Encountered:** The repository-wide pytest suite still contains pre-existing failures in effect selector/web shader loader tests; story validation relied on focused US-001/US-002 node+widget tests to confirm no regressions in the touched surfaces.
+
+**Useful Context for Future Agents:** `web/vhs_effect.js` follows the same test harness contract as `web/glitch_effect.js` (fake DOM canvas + injected shader loader + `preview_descriptor` assertions), so new per-effect widgets can be added quickly by cloning this structure and renaming effect/node/state keys.
