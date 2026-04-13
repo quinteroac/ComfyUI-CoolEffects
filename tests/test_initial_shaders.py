@@ -41,6 +41,28 @@ def test_shaders_declare_required_uniforms():
         assert "uniform vec2 u_resolution;" in source
 
 
+def test_glitch_shader_declares_per_effect_uniforms():
+    source = _load_loader_module().load_shader("glitch")
+
+    assert "uniform float u_wave_freq;" in source
+    assert "uniform float u_wave_amp;" in source
+    assert "uniform float u_speed;" in source
+
+
+def test_glitch_shader_wave_formula_uses_per_effect_uniforms():
+    source = _load_loader_module().load_shader("glitch")
+
+    assert "sin(uv.y * u_wave_freq + u_time * u_speed) * u_wave_amp" in source
+
+
+def test_glitch_shader_has_no_hardcoded_wave_constants():
+    source = _load_loader_module().load_shader("glitch")
+
+    assert "uv.y * 120.0" not in source
+    assert "u_time * 10.0" not in source
+    assert "* 0.0025" not in source
+
+
 def test_shaders_compile_in_moderngl():
     moderngl = pytest.importorskip("moderngl")
     loader_module = _load_loader_module()

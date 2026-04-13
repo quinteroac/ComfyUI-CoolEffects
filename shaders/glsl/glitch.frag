@@ -3,12 +3,15 @@
 uniform sampler2D u_image;
 uniform float u_time;
 uniform vec2 u_resolution;
+uniform float u_wave_freq;
+uniform float u_wave_amp;
+uniform float u_speed;
 
 out vec4 fragColor;
 
 void main() {
     vec2 uv = gl_FragCoord.xy / u_resolution;
-    float wave = sin(uv.y * 120.0 + u_time * 10.0) * 0.0025;
+    float wave = sin(uv.y * u_wave_freq + u_time * u_speed) * u_wave_amp;
     vec2 r_uv = uv + vec2(wave * 1.8, 0.0);
     vec2 g_uv = uv + vec2(wave * 0.7, 0.0);
     vec2 b_uv = uv - vec2(wave * 1.2, 0.0);
