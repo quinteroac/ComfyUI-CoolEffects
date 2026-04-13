@@ -29,3 +29,13 @@
 **Pitfalls Encountered:** Existing unrelated widget/JS loader tests still fail in baseline; validation remained focused on shader/default tests tied to this story's acceptance criteria.
 
 **Useful Context for Future Agents:** For the pan-family shaders, keep `u_speed`, `u_origin_x`, `u_origin_y` uniform/default contracts identical and change only the directional scroll vector to avoid behavioral drift.
+
+## US-004 — Pan Down shader renders a top-to-bottom scrolling animation
+
+**Summary:** Added `pan_down.frag` with wrapped downward UV scrolling, registered `pan_down` defaults in `DEFAULT_PARAMS`, and extended shader/default/readme tests to include the new effect.
+
+**Key Decisions:** Followed the existing pan-family structure and implemented down-scroll as a negative Y time offset (`vec2(0.0, -u_speed * u_time)`) while preserving origin offset and `fract()` wrapping.
+
+**Pitfalls Encountered:** None beyond ensuring all pan-family contract assertions remained synchronized when expanding expected shader lists and README coverage counts.
+
+**Useful Context for Future Agents:** The `EXPECTED_SHADERS` tuple in `tests/test_initial_shaders.py` drives file-existence and compile checks; whenever adding a shader, update that tuple and the README contract assertions in the same change.

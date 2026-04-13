@@ -32,6 +32,11 @@ DEFAULT_PARAMS: dict[str, dict] = {
         "u_origin_x": 0.0,
         "u_origin_y": 0.0,
     },
+    "pan_down": {
+        "u_speed": 0.1,
+        "u_origin_x": 0.0,
+        "u_origin_y": 0.0,
+    },
 }
 
 
