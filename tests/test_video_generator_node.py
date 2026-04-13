@@ -74,11 +74,18 @@ class _FakeTexture:
         self.size = size
         self.components = components
         self.data = data
+        self.uploads = []
+        if data is not None:
+            self.uploads.append(data)
         self.used_locations = []
         self.released = False
 
     def use(self, location):
         self.used_locations.append(location)
+
+    def write(self, data):
+        self.data = data
+        self.uploads.append(data)
 
     def release(self):
         self.released = True
@@ -306,6 +313,20 @@ def test_video_generator_backward_compatible_single_image_tensor_shapes(monkeypa
     assert torch.equal(output_from_single, output_from_batch)
 
 
+def test_video_generator_accepts_image_batch_input_shape_without_error(monkeypatch):
+    module = _load_module(NODE_PATH)
+    fake_moderngl = _FakeModerngl()
+    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
+    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
+    monkeypatch.setattr(module, "load_vertex_shader", lambda _name: "vertex-source")
+
+    node = module.CoolVideoGenerator()
+    image_batch = torch.rand((3, 2, 3, 3), dtype=torch.float32)
+    output, = node.execute(image=image_batch, effect_params=_build_effect_params("glitch"), fps=4, duration=1.0)
+
+    assert output.shape == (4, 2, 3, 3)
+
+
 def test_video_generator_backward_compatible_frame_count_uses_round(monkeypatch):
     module = _load_module(NODE_PATH)
     fake_moderngl = _FakeModerngl()
@@ -511,6 +532,74 @@ def test_video_generator_sets_base_uniforms_independently_from_effect_params(mon
     assert program["u_image"].values == [0]
     assert program["u_resolution"].values == [(3, 2)]
     assert program["u_time"].values == [0.0, 1.0 / 3.0, 2.0 / 3.0]
+
+
+def test_video_generator_uses_batch_frames_with_modulo_indexing(monkeypatch):
+    module = _load_module(NODE_PATH)
+    fake_moderngl = _FakeModerngl()
+    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
+    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
+
+    node = module.CoolVideoGenerator()
+    image_batch = torch.tensor(
+        [
+            [[[0.1, 0.1, 0.1]]],
+            [[[0.5, 0.5, 0.5]]],
+        ],
+        dtype=torch.float32,
+    )
+    node.execute(image=image_batch, effect_params=_build_effect_params("glitch"), fps=5, duration=1.0)
+
+    expected_upload_order = [
+        bytes([25, 25, 25]),
+        bytes([127, 127, 127]),
+        bytes([25, 25, 25]),
+        bytes([127, 127, 127]),
+        bytes([25, 25, 25]),
+    ]
+    input_texture = fake_moderngl.latest_context.texture_objects[0]
+    assert input_texture.uploads == expected_upload_order
+
+
+def test_video_generator_frame_count_is_independent_from_batch_size(monkeypatch):
+    module = _load_module(NODE_PATH)
+    fake_moderngl = _FakeModerngl()
+    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
+    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
+
+    node = module.CoolVideoGenerator()
+    image_batch = torch.rand((7, 2, 3, 3), dtype=torch.float32)
+    output, = node.execute(image=image_batch, effect_params=_build_effect_params("glitch"), fps=3, duration=0.6)
+
+    assert output.shape[0] == round(0.6 * 3)
+
+
+def test_video_generator_does_not_upload_unused_batch_frames_when_output_is_shorter(monkeypatch):
+    module = _load_module(NODE_PATH)
+    fake_moderngl = _FakeModerngl()
+    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
+    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
+
+    node = module.CoolVideoGenerator()
+    image_batch = torch.tensor(
+        [
+            [[[0.0, 0.0, 0.0]]],
+            [[[0.1, 0.1, 0.1]]],
+            [[[0.2, 0.2, 0.2]]],
+            [[[0.3, 0.3, 0.3]]],
+            [[[0.4, 0.4, 0.4]]],
+        ],
+        dtype=torch.float32,
+    )
+    output, = node.execute(image=image_batch, effect_params=_build_effect_params("glitch"), fps=3, duration=1.0)
+
+    assert output.shape[0] == 3
+    input_texture = fake_moderngl.latest_context.texture_objects[0]
+    assert input_texture.uploads == [
+        bytes([0, 0, 0]),
+        bytes([25, 25, 25]),
+        bytes([51, 51, 51]),
+    ]
 
 
 def test_video_generator_uses_default_uniforms_when_effect_params_are_empty(monkeypatch):

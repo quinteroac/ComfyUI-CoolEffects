@@ -48,21 +48,21 @@ _FULLSCREEN_QUAD_VERTICES = np.array(
 )
 
 
-def _extract_input_image(image: torch.Tensor) -> tuple[np.ndarray, int, int]:
+def _extract_input_image(image: torch.Tensor) -> tuple[np.ndarray, int, int, int]:
     if image.ndim == 4:
-        frame = image[0]
+        frame_batch = image
     elif image.ndim == 3:
-        frame = image
+        frame_batch = image.unsqueeze(0)
     else:
         raise ValueError("Expected image tensor with shape [N, H, W, C] or [H, W, C]")
 
-    if frame.shape[-1] != 3:
+    if frame_batch.shape[-1] != 3:
         raise ValueError("Expected RGB image input with 3 channels")
 
-    frame_cpu = frame.detach().cpu().clamp(0.0, 1.0)
-    height, width, _ = frame_cpu.shape
-    frame_uint8 = (frame_cpu.numpy() * 255.0).astype(np.uint8)
-    return frame_uint8, width, height
+    frame_batch_cpu = frame_batch.detach().cpu().clamp(0.0, 1.0)
+    _, height, width, _ = frame_batch_cpu.shape
+    frame_batch_uint8 = (frame_batch_cpu.numpy() * 255.0).astype(np.uint8)
+    return frame_batch_uint8, width, height, frame_batch_uint8.shape[0]
 
 
 def _extract_effect_name(effect_params: dict) -> str:
@@ -112,7 +112,7 @@ class CoolVideoGenerator:
 
         import moderngl
 
-        source_frame, width, height = _extract_input_image(image)
+        source_frames, width, height, source_frame_count = _extract_input_image(image)
         frame_count = round(duration * fps)
 
         ctx = None
@@ -130,7 +130,7 @@ class CoolVideoGenerator:
                 vertex_shader=vertex_shader_source,
                 fragment_shader=fragment_shader_source,
             )
-            input_texture = ctx.texture((width, height), 3, source_frame.tobytes())
+            input_texture = ctx.texture((width, height), 3, source_frames[0].tobytes())
             output_texture = ctx.texture((width, height), 3)
             fbo = ctx.framebuffer(color_attachments=[output_texture])
             vbo = ctx.buffer(_FULLSCREEN_QUAD_VERTICES.tobytes())
@@ -139,8 +139,13 @@ class CoolVideoGenerator:
             input_texture.use(location=0)
             program["u_image"].value = 0
             program["u_resolution"].value = (width, height)
+            active_source_frame_index = 0
 
             for frame_index in range(frame_count):
+                source_frame_index = frame_index % source_frame_count
+                if source_frame_index != active_source_frame_index:
+                    input_texture.write(source_frames[source_frame_index].tobytes())
+                    active_source_frame_index = source_frame_index
                 for uniform_name, uniform_value in final_uniform_params.items():
                     try:
                         program[uniform_name].value = float(uniform_value)
