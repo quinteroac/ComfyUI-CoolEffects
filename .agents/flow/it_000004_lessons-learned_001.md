@@ -29,3 +29,13 @@
 **Pitfalls Encountered:** The test double context originally only implemented `texture(...)`; adding renderbuffer support required extending the fake context and release assertions to keep resource lifecycle tests accurate.
 
 **Useful Context for Future Agents:** `tests/test_video_generator_node.py` now explicitly asserts `len(context.texture_objects) == 1` for batch rendering and long (120-frame) runs, so future regressions that reintroduce per-frame texture allocation should fail fast.
+
+## US-004 — Tests cover the batch rendering path
+
+**Summary:** Added acceptance-focused regression coverage in `tests/test_video_generator_node.py` for batch rendering modulo indexing and batch-of-1 compatibility with the single-image execution path.
+
+**Key Decisions:** Kept generator runtime behavior unchanged and strengthened the ModernGL test double (`_FakeTexture`) to track explicit `write()` calls so tests can assert per-frame batch upload sequencing through deterministic byte payloads.
+
+**Pitfalls Encountered:** Running the entire `tests/` suite in this environment still surfaces pre-existing frontend/widget failures unrelated to `CoolVideoGenerator`; backend video-generator tests pass in isolation.
+
+**Useful Context for Future Agents:** The new assertions now check both `uploads` (initial texture payload + updates) and `write_calls` (update-only path), which makes it straightforward to reason about modulo frame selection and detect texture upload regressions.
