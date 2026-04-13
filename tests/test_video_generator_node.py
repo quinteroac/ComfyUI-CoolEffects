@@ -1,4 +1,5 @@
 import importlib.util
+import inspect
 import sys
 import time
 import uuid
@@ -10,7 +11,7 @@ torch = pytest.importorskip("torch")
 
 PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 NODE_PATH = PACKAGE_ROOT / "nodes" / "video_generator.py"
-SELECTOR_NODE_PATH = PACKAGE_ROOT / "nodes" / "effect_selector.py"
+EFFECT_PARAMS_PATH = PACKAGE_ROOT / "nodes" / "effect_params.py"
 PACKAGE_INIT = PACKAGE_ROOT / "__init__.py"
 
 
@@ -21,6 +22,11 @@ def _load_module(module_path: Path):
     assert spec is not None and spec.loader is not None
     spec.loader.exec_module(module)
     return module
+
+
+def _build_effect_params(effect_name: str, params: dict | None = None) -> dict:
+    effect_params_module = _load_module(EFFECT_PARAMS_PATH)
+    return effect_params_module.build_effect_params(effect_name, params or {})
 
 
 class _FakeUniform:
@@ -161,24 +167,21 @@ class _FakeModerngl:
         return self.latest_context
 
 
-def test_selector_effect_name_output_connects_to_video_generator_effect_input(monkeypatch):
-    selector_module = _load_module(SELECTOR_NODE_PATH)
+def test_effect_params_payload_connects_to_video_generator_effect_input(monkeypatch):
     video_module = _load_module(NODE_PATH)
     fake_moderngl = _FakeModerngl()
     monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
     monkeypatch.setattr(video_module, "load_shader", lambda _name: "shader-source")
     monkeypatch.setattr(video_module, "load_vertex_shader", lambda _name: "vertex-source")
 
-    selector = selector_module.CoolEffectSelector()
-    effect_name, = selector.execute("vhs")
-
     generator = video_module.CoolVideoGenerator()
     image = torch.ones((1, 2, 2, 3), dtype=torch.float32)
-    output, = generator.execute(image=image, effect_name=effect_name, fps=1, duration=1.0)
+    effect_params = _build_effect_params("vhs")
+    output, = generator.execute(image=image, effect_params=effect_params, fps=1, duration=1.0)
 
-    assert selector_module.CoolEffectSelector.RETURN_TYPES == ("STRING",)
-    assert video_module.CoolVideoGenerator.INPUT_TYPES()["required"]["effect_name"][0] == "STRING"
-    assert effect_name == "vhs"
+    assert video_module.CoolVideoGenerator.INPUT_TYPES()["required"]["effect_params"] == ("EFFECT_PARAMS",)
+    assert "effect_name" not in video_module.CoolVideoGenerator.INPUT_TYPES()["required"]
+    assert effect_params["effect_name"] == "vhs"
     assert output.shape == (1, 2, 2, 3)
 
 
@@ -192,7 +195,7 @@ def test_video_generator_uses_standalone_context_and_frame_time(monkeypatch):
     node = module.CoolVideoGenerator()
     image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
 
-    output, = node.execute(image=image, effect_name="glitch", fps=4, duration=1.0)
+    output, = node.execute(image=image, effect_params=_build_effect_params("glitch"), fps=4, duration=1.0)
 
     assert fake_moderngl.create_calls == 1
     assert fake_moderngl.latest_context.vertex_shader == "vertex-source"
@@ -213,12 +216,19 @@ def test_video_generator_input_types_expose_fps_and_duration_widgets():
     required_inputs = input_types["required"]
 
     assert required_inputs["image"] == ("IMAGE",)
-    assert required_inputs["effect_name"] == ("STRING", {"default": "glitch"})
+    assert required_inputs["effect_params"] == ("EFFECT_PARAMS",)
+    assert "effect_name" not in required_inputs
     assert required_inputs["fps"] == ("INT", {"default": 30, "min": 1, "max": 60})
     assert required_inputs["duration"] == (
         "FLOAT",
         {"default": 3.0, "min": 0.5, "max": 60.0, "step": 0.5},
     )
+
+
+def test_video_generator_execute_signature_accepts_effect_params():
+    module = _load_module(NODE_PATH)
+    execute_parameters = list(inspect.signature(module.CoolVideoGenerator.execute).parameters)
+    assert execute_parameters == ["self", "image", "effect_params", "fps", "duration"]
 
 
 def test_video_generator_rounds_total_frames_from_duration_times_fps(monkeypatch):
@@ -229,7 +239,7 @@ def test_video_generator_rounds_total_frames_from_duration_times_fps(monkeypatch
 
     node = module.CoolVideoGenerator()
     image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
-    output, = node.execute(image=image, effect_name="glitch", fps=3, duration=0.5)
+    output, = node.execute(image=image, effect_params=_build_effect_params("glitch"), fps=3, duration=0.5)
 
     assert output.shape[0] == round(0.5 * 3)
     assert fake_moderngl.latest_context.vertex_array_object.rendered_times == [0.0, 1.0 / 3.0]
@@ -243,7 +253,7 @@ def test_video_generator_reads_rgb_bytes_per_frame(monkeypatch):
 
     node = module.CoolVideoGenerator()
     image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
-    node.execute(image=image, effect_name="glitch", fps=3, duration=1.0)
+    node.execute(image=image, effect_params=_build_effect_params("glitch"), fps=3, duration=1.0)
 
     framebuffer = fake_moderngl.latest_context.framebuffer_object
     assert framebuffer.read_components == [3, 3, 3]
@@ -257,7 +267,7 @@ def test_video_generator_returns_float32_image_batch_tensor(monkeypatch):
 
     node = module.CoolVideoGenerator()
     image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
-    output, = node.execute(image=image, effect_name="glitch", fps=2, duration=1.0)
+    output, = node.execute(image=image, effect_params=_build_effect_params("glitch"), fps=2, duration=1.0)
 
     assert output.shape == (2, 2, 3, 3)
     assert output.dtype == torch.float32
@@ -273,7 +283,7 @@ def test_video_generator_returns_image_output(monkeypatch):
 
     node = module.CoolVideoGenerator()
     image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
-    result = node.execute(image=image, effect_name="glitch", fps=1, duration=1.0)
+    result = node.execute(image=image, effect_params=_build_effect_params("glitch"), fps=1, duration=1.0)
 
     assert module.CoolVideoGenerator.RETURN_TYPES == ("IMAGE",)
     assert isinstance(result, tuple)
@@ -295,7 +305,7 @@ def test_video_generator_outputs_90_frames_for_3s_at_30fps(monkeypatch):
 
     node = module.CoolVideoGenerator()
     image = torch.ones((1, 4, 5, 3), dtype=torch.float32)
-    output, = node.execute(image=image, effect_name="glitch", fps=30, duration=3.0)
+    output, = node.execute(image=image, effect_params=_build_effect_params("glitch"), fps=30, duration=3.0)
 
     assert output.shape == (90, 4, 5, 3)
 
@@ -310,7 +320,7 @@ def test_video_generator_renders_512_square_90_frames_under_30_seconds(monkeypat
     image = torch.ones((1, 512, 512, 3), dtype=torch.float32)
 
     start = time.perf_counter()
-    output, = node.execute(image=image, effect_name="glitch", fps=30, duration=3.0)
+    output, = node.execute(image=image, effect_params=_build_effect_params("glitch"), fps=30, duration=3.0)
     elapsed = time.perf_counter() - start
 
     assert output.shape == (90, 512, 512, 3)
@@ -325,7 +335,7 @@ def test_video_generator_output_is_preview_image_compatible(monkeypatch):
 
     node = module.CoolVideoGenerator()
     image = torch.ones((1, 2, 2, 3), dtype=torch.float32)
-    output, = node.execute(image=image, effect_name="glitch", fps=3, duration=1.0)
+    output, = node.execute(image=image, effect_params=_build_effect_params("glitch"), fps=3, duration=1.0)
 
     preview_frames = [output[frame_index] for frame_index in range(output.shape[0])]
     assert len(preview_frames) == 3
@@ -340,7 +350,7 @@ def test_video_generator_binds_u_image_texture_and_resolution(monkeypatch):
 
     node = module.CoolVideoGenerator()
     image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
-    node.execute(image=image, effect_name="glitch", fps=1, duration=1.0)
+    node.execute(image=image, effect_params=_build_effect_params("glitch"), fps=1, duration=1.0)
 
     context = fake_moderngl.latest_context
     input_texture = context.texture_objects[0]
@@ -359,7 +369,12 @@ def test_video_generator_raises_value_error_when_shader_missing(monkeypatch):
     image = torch.ones((1, 2, 2, 3), dtype=torch.float32)
 
     with pytest.raises(ValueError, match="effect_name 'missing_effect'"):
-        node.execute(image=image, effect_name="missing_effect", fps=1, duration=1.0)
+        node.execute(
+            image=image,
+            effect_params=_build_effect_params("missing_effect"),
+            fps=1,
+            duration=1.0,
+        )
 
 
 def test_video_generator_releases_gl_resources(monkeypatch):
@@ -370,7 +385,7 @@ def test_video_generator_releases_gl_resources(monkeypatch):
 
     node = module.CoolVideoGenerator()
     image = torch.ones((1, 2, 2, 3), dtype=torch.float32)
-    node.execute(image=image, effect_name="glitch", fps=1, duration=1.0)
+    node.execute(image=image, effect_params=_build_effect_params("glitch"), fps=1, duration=1.0)
 
     context = fake_moderngl.latest_context
     assert context.program_object.released is True

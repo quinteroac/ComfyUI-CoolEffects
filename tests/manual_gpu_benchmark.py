@@ -25,10 +25,11 @@ def _run_benchmark(effect_name: str, width: int, height: int, fps: int, duration
     node = module.CoolVideoGenerator()
 
     image = torch.ones((1, height, width, 3), dtype=torch.float32)
+    effect_params = {"effect_name": effect_name, "params": {}}
     expected_frames = round(duration * fps)
 
     start = time.perf_counter()
-    output, = node.execute(image=image, effect_name=effect_name, fps=fps, duration=duration)
+    output, = node.execute(image=image, effect_params=effect_params, fps=fps, duration=duration)
     elapsed_seconds = time.perf_counter() - start
 
     passed = elapsed_seconds < threshold_seconds and tuple(output.shape) == (expected_frames, height, width, 3)

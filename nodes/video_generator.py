@@ -54,13 +54,23 @@ def _extract_input_image(image: torch.Tensor) -> tuple[np.ndarray, int, int]:
     return frame_uint8, width, height
 
 
+def _extract_effect_name(effect_params: dict) -> str:
+    if not isinstance(effect_params, dict):
+        raise ValueError("effect_params must be a dict")
+
+    effect_name = effect_params.get("effect_name")
+    if not isinstance(effect_name, str) or not effect_name:
+        raise ValueError("effect_params.effect_name must be a non-empty string")
+    return effect_name
+
+
 class CoolVideoGenerator:
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
                 "image": ("IMAGE",),
-                "effect_name": ("STRING", {"default": "glitch"}),
+                "effect_params": ("EFFECT_PARAMS",),
                 "fps": ("INT", {"default": 30, "min": 1, "max": 60}),
                 "duration": ("FLOAT", {"default": 3.0, "min": 0.5, "max": 60.0, "step": 0.5}),
             }
@@ -71,7 +81,8 @@ class CoolVideoGenerator:
     FUNCTION = "execute"
     CATEGORY = "CoolEffects"
 
-    def execute(self, image, effect_name, fps, duration):
+    def execute(self, image, effect_params, fps, duration):
+        effect_name = _extract_effect_name(effect_params)
         try:
             fragment_shader_source = load_shader(effect_name)
         except FileNotFoundError as error:
