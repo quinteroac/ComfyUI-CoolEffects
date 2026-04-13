@@ -9,3 +9,13 @@
 **Pitfalls Encountered:** The environment lacked `pytest` tooling (`pytest`, `python -m pytest`, `pip`, and apt install permissions), so runtime pytest execution was not possible in this session.
 
 **Useful Context for Future Agents:** Effect-node tests in this repo are structured as standalone module loads via `importlib.util.spec_from_file_location`; for new nodes, following this same pattern keeps tests isolated from package import side effects and aligns with existing conventions.
+
+## US-002 — CoolPanRightEffect node produces valid EFFECT_PARAMS
+
+**Summary:** Added `CoolPanRightEffect` in `nodes/pan_right_effect.py` with the same float control schema as `CoolPanLeftEffect`, wired it in `__init__.py`, and added focused tests in `tests/test_pan_right_effect_node.py` for input schema, execute contract, and node registration.
+
+**Key Decisions:** Mirrored the existing dedicated effect-node loading pattern (`importlib.util.spec_from_file_location`) and reused the same node metadata contract (`RETURN_TYPES`, `RETURN_NAMES`, `FUNCTION`, `CATEGORY`) to stay consistent with current architecture and ComfyUI expectations.
+
+**Pitfalls Encountered:** `pytest` is not installed in this environment (`pytest: command not found`), so local test execution could not be completed in-session even though test files were added.
+
+**Useful Context for Future Agents:** For pan-direction nodes, matching the existing standalone-module test style keeps tests isolated from package side effects and makes registration checks straightforward via direct `__init__.py` module loading.
