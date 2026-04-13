@@ -1,0 +1,148 @@
+{
+  "goals": [
+    "Implement `CoolGlitchEffect`, `CoolVHSEffect`, and `CoolZoomPulseEffect` nodes.",
+    "Each node exposes its effect-specific parameters as native ComfyUI FLOAT widgets.",
+    "Each node outputs `EFFECT_PARAMS` with the effect name and current parameter values.",
+    "Each node shows a live animated GLSL preview that updates in real time when a parameter widget changes."
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "CoolGlitchEffect node",
+      "description": "As a ComfyUI user, I want a dedicated Glitch effect node with wave controls so that I can tune the glitch look and wire the result to the video generator.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "Node `CoolGlitchEffect` appears in the `CoolEffects` category."
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "Native FLOAT inputs: `wave_freq` (default 120.0, min 1.0, max 500.0, step 1.0), `wave_amp` (default 0.0025, min 0.0, max 0.05, step 0.0005), `speed` (default 10.0, min 0.0, max 100.0, step 0.5)."
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "`RETURN_TYPES = (\"EFFECT_PARAMS\",)`, `RETURN_NAMES = (\"EFFECT_PARAMS\",)`."
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "`execute(self, wave_freq, wave_amp, speed)` returns `(build_effect_params(\"glitch\", {\"u_wave_freq\": wave_freq, \"u_wave_amp\": wave_amp, \"u_speed\": speed}),)`."
+        },
+        {
+          "id": "US-001-AC05",
+          "text": "The node widget shows a live animated preview of `glitch.frag` using the placeholder texture."
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "CoolVHSEffect node",
+      "description": "As a ComfyUI user, I want a dedicated VHS effect node with scanline and chroma controls so that I can dial in the retro look precisely.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "Node `CoolVHSEffect` appears in the `CoolEffects` category."
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "Native FLOAT inputs: `scanline_intensity` (default 0.04, min 0.0, max 0.5, step 0.005), `jitter_amount` (default 0.0018, min 0.0, max 0.02, step 0.0002), `chroma_shift` (default 0.002, min 0.0, max 0.02, step 0.0002)."
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "`RETURN_TYPES = (\"EFFECT_PARAMS\",)`, `RETURN_NAMES = (\"EFFECT_PARAMS\",)`."
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "`execute(self, scanline_intensity, jitter_amount, chroma_shift)` returns the correct `EFFECT_PARAMS` bundle with keys `u_scanline_intensity`, `u_jitter_amount`, `u_chroma_shift`."
+        },
+        {
+          "id": "US-002-AC05",
+          "text": "The node widget shows a live animated preview of `vhs.frag` using the placeholder texture."
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "CoolZoomPulseEffect node",
+      "description": "As a ComfyUI user, I want a dedicated ZoomPulse effect node with pulse controls so that I can control zoom intensity and rhythm.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "Node `CoolZoomPulseEffect` appears in the `CoolEffects` category."
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "Native FLOAT inputs: `pulse_amp` (default 0.06, min 0.0, max 0.5, step 0.005), `pulse_speed` (default 3.0, min 0.1, max 20.0, step 0.1)."
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "`RETURN_TYPES = (\"EFFECT_PARAMS\",)`, `RETURN_NAMES = (\"EFFECT_PARAMS\",)`."
+        },
+        {
+          "id": "US-003-AC04",
+          "text": "`execute(self, pulse_amp, pulse_speed)` returns the correct `EFFECT_PARAMS` bundle with keys `u_pulse_amp`, `u_pulse_speed`."
+        },
+        {
+          "id": "US-003-AC05",
+          "text": "The node widget shows a live animated preview of `zoom_pulse.frag` using the placeholder texture."
+        }
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Real-time preview reflects parameter changes",
+      "description": "As a ComfyUI user, I want the preview canvas to update when I change a parameter widget so that I can preview the effect before queuing a render.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-004-AC01",
+          "text": "Each per-effect node's JS extension registers an `onWidgetChanged` handler that calls `renderer.set_uniform(uniform_name, value)` and does not reload the shader program."
+        },
+        {
+          "id": "US-004-AC02",
+          "text": "The preview updates within one animation frame of the widget value changing."
+        },
+        {
+          "id": "US-004-AC03",
+          "text": "The mapping from widget name to uniform name matches the keys used in `execute` (e.g. widget `wave_freq` → uniform `u_wave_freq`)."
+        },
+        {
+          "id": "US-004-AC04",
+          "text": "When WebGL2 is unavailable, the overlay error message is shown and no exception is thrown."
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "Three new Python files: `nodes/glitch_effect.py`, `nodes/vhs_effect.py`, `nodes/zoom_pulse_effect.py`."
+    },
+    {
+      "id": "FR-2",
+      "description": "Each node imports `EFFECT_PARAMS` and `build_effect_params` from `nodes/effect_params.py`."
+    },
+    {
+      "id": "FR-3",
+      "description": "All parameter inputs are defined as native ComfyUI `FLOAT` widgets in `INPUT_TYPES[\"required\"]`."
+    },
+    {
+      "id": "FR-4",
+      "description": "`__init__.py` registers `CoolGlitchEffect`, `CoolVHSEffect`, `CoolZoomPulseEffect` in `NODE_CLASS_MAPPINGS` and `NODE_DISPLAY_NAME_MAPPINGS`."
+    },
+    {
+      "id": "FR-5",
+      "description": "A new JS file `web/effect_node_widget.js` exports `mount_effect_node_widget(node, effect_name, param_specs)` — a reusable function that mounts only the preview canvas DOM widget and registers an `onWidgetChanged` hook that calls `renderer.set_uniform` for each parameter widget change."
+    },
+    {
+      "id": "FR-6",
+      "description": "Each effect has a corresponding JS extension file (`web/glitch_effect.js`, etc.) that calls `mount_effect_node_widget` in `onNodeCreated` with the correct `effect_name` and `param_specs` (array of `{widget_name, uniform_name}`)."
+    },
+    {
+      "id": "FR-7",
+      "description": "`mount_effect_node_widget` initializes the WebGL2 preview with default uniform values from `DEFAULT_PARAMS` (fetched via the existing `/cool_effects/shaders` endpoint or hardcoded in JS matching the Python defaults)."
+    },
+    {
+      "id": "FR-8",
+      "description": "The `CoolEffectSelector` node and its widget are not modified."
+    }
+  ]
+}

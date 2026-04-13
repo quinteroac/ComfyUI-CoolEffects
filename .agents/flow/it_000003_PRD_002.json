@@ -1,0 +1,103 @@
+{
+  "goals": [
+    "Replace the `EFFECT_NAME` STRING input with an `EFFECT_PARAMS` typed input.",
+    "Merge incoming params with `DEFAULT_PARAMS` so missing params always fall back to sensible values.",
+    "Pass the merged uniform dict to the ModernGL render loop."
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Accept EFFECT_PARAMS input",
+      "description": "As a ComfyUI user, I want `CoolVideoGenerator` to accept an `EFFECT_PARAMS` connection so that I can wire any per-effect node directly to the video generator.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "`CoolVideoGenerator.INPUT_TYPES` declares `effect_params` with type `\"EFFECT_PARAMS\"` under `required`."
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "The `EFFECT_NAME` STRING input is removed from `INPUT_TYPES`."
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "The `execute` method signature is `execute(self, image, effect_params, fps, duration)`."
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Default param merging",
+      "description": "As a ComfyUI user, I want missing parameters in the EFFECT_PARAMS bundle to fall back to the effect's defaults so that partial params produce valid renders instead of broken output.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "Before rendering, the node calls `merge_params(effect_params[\"effect_name\"], effect_params[\"params\"])` to produce the final uniform dict."
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "If `effect_params[\"params\"]` is empty (`{}`), the render uses all default values and produces the same output as the original hardcoded implementation."
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "If `effect_params[\"effect_name\"]` is not in `DEFAULT_PARAMS`, a `ValueError` is raised with a message identifying the unknown effect."
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "Per-uniform ModernGL dispatch",
+      "description": "As a ComfyUI user, I want each uniform in the merged params dict to be set on the shader program before rendering so that the rendered frames reflect the configured parameters.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "Inside the render loop, for each `(name, value)` in the merged params dict, `program[name].value = float(value)` is called if the uniform exists in the program; non-existent uniform names are silently skipped."
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "The base uniforms `u_time`, `u_image`, and `u_resolution` continue to be set as before, independently of the params dict."
+        }
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Backward-compatible frame output",
+      "description": "As a ComfyUI user, I want the output tensor shape and dtype to remain unchanged so that downstream nodes continue to work without modification.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-004-AC01",
+          "text": "Output tensor shape is `[N, H, W, 3]`, dtype `float32`, values in `[0, 1]`."
+        },
+        {
+          "id": "US-004-AC02",
+          "text": "Frame count `N = round(duration * fps)` is unchanged."
+        },
+        {
+          "id": "US-004-AC03",
+          "text": "`fps` and `duration` input definitions (type, default, min, max, step) are unchanged."
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "`CoolVideoGenerator.INPUT_TYPES` replaces `effect_name (STRING)` with `effect_params (EFFECT_PARAMS)`."
+    },
+    {
+      "id": "FR-2",
+      "description": "`nodes/video_generator.py` imports `EFFECT_PARAMS` and `merge_params` from `nodes/effect_params.py`."
+    },
+    {
+      "id": "FR-3",
+      "description": "The render loop calls `merge_params` before iterating frames, and sets per-effect uniforms via `program[name].value = float(value)` with a `try/except KeyError` guard for unknown uniform names."
+    },
+    {
+      "id": "FR-4",
+      "description": "GL resource cleanup (`try/finally`) for ctx, texture, program, fbo, vbo is preserved."
+    },
+    {
+      "id": "FR-5",
+      "description": "`__init__.py` node registration is updated if needed to reflect the new input type."
+    }
+  ]
+}

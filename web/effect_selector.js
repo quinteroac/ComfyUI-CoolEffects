@@ -3,24 +3,26 @@ import { listShaders, loadShader } from "./shaders/loader.js";
 const GLOBAL_RESIZE_CALLBACKS = new Set();
 let GLOBAL_RESIZE_LISTENER = null;
 export const EXTENSION_NAME = "Comfy.CoolEffects.EffectSelector";
-const VERTEX_SHADER_SOURCE = `
-varying vec2 v_uv;
+
+const WEBGL2_VERTEX_SOURCE = `#version 300 es
+in vec2 a_pos;
+out vec2 v_uv;
 void main() {
-    v_uv = uv;
-    gl_Position = vec4(position, 1.0);
-}
-`;
-const FALLBACK_FRAGMENT_SHADER = `
-precision mediump float;
-varying vec2 v_uv;
+    v_uv = (a_pos + 1.0) * 0.5;
+    gl_Position = vec4(a_pos, 0.0, 1.0);
+}`;
+
+const WEBGL2_FALLBACK_FRAGMENT = `#version 300 es
+precision highp float;
+precision highp sampler2D;
 uniform sampler2D u_image;
 uniform float u_time;
 uniform vec2 u_resolution;
+out vec4 fragColor;
 void main() {
-    vec4 sampled = texture2D(u_image, v_uv);
-    gl_FragColor = vec4(sampled.rgb, 1.0);
-}
-`;
+    vec2 uv = gl_FragCoord.xy / u_resolution;
+    fragColor = texture(u_image, uv);
+}`;
 
 function subscribe_global_resize(callback) {
     if (typeof callback !== "function") {
@@ -72,6 +74,17 @@ export function create_effect_dropdown_widget(
 
     const select_element = document_ref.createElement("select");
     select_element.setAttribute("aria-label", "Effect");
+    Object.assign(select_element.style, {
+        width: "100%",
+        padding: "4px 8px",
+        background: "#1a1a1a",
+        color: "#ddd",
+        border: "1px solid #444",
+        borderRadius: "4px",
+        fontSize: "13px",
+        cursor: "pointer",
+        boxSizing: "border-box",
+    });
     shader_names.forEach((shader_name) => {
         const option_element = document_ref.createElement("option");
         option_element.value = shader_name;
@@ -122,21 +135,42 @@ function get_element_size(canvas_element) {
 export function create_canvas_preview_surface(document_ref) {
     const root_element = document_ref.createElement("div");
     root_element.setAttribute("data-preview-root", "cool-effects");
+    Object.assign(root_element.style, {
+        position: "relative",
+        width: "100%",
+        borderRadius: "4px",
+        overflow: "hidden",
+        background: "#111",
+    });
 
     const canvas_element = document_ref.createElement("canvas");
-    canvas_element.width = 512;
-    canvas_element.height = 512;
-    canvas_element.setAttribute("data-renderer", "r3f");
+    canvas_element.width = 200;
+    canvas_element.height = 200;
+    canvas_element.setAttribute("data-renderer", "webgl2");
     canvas_element.setAttribute("aria-label", "Live GLSL preview");
-    canvas_element.style = canvas_element.style || {};
-    canvas_element.style.background = "transparent";
+    Object.assign(canvas_element.style, {
+        display: "block",
+        width: "100%",
+        height: "auto",
+        aspectRatio: "1",
+    });
     root_element.appendChild(canvas_element);
 
     const overlay_element = document_ref.createElement("div");
     overlay_element.setAttribute("data-preview-overlay", "cool-effects");
     overlay_element.setAttribute("aria-live", "polite");
     overlay_element.setAttribute("role", "status");
-    overlay_element.style = overlay_element.style || {};
+    Object.assign(overlay_element.style, {
+        position: "absolute",
+        bottom: "4px",
+        left: "4px",
+        right: "4px",
+        color: "#ff4444",
+        fontSize: "11px",
+        lineHeight: "1.3",
+        pointerEvents: "none",
+        textShadow: "0 1px 2px rgba(0,0,0,0.8)",
+    });
     overlay_element.textContent = "";
     root_element.appendChild(overlay_element);
 
@@ -199,25 +233,154 @@ export function create_preview_descriptor({
     effect_name,
     input_image,
     canvas_element,
-    shader_material = null,
-    r3f_root = null,
-    renderer_mode = "descriptor",
+    renderer_mode = "webgl2",
 }) {
     const [width, height] = get_element_size(canvas_element);
     return {
         renderer: renderer_mode,
-        three_canvas: true,
-        mesh: "plane",
         effect_name,
         fragment_shader_source,
-        shader_material,
-        r3f_root,
         uniforms: {
             u_image: input_image ?? null,
             u_time: 0,
             u_resolution: [width, height],
         },
     };
+}
+
+function adapt_fragment_for_webgl2(source) {
+    const stripped = source.replace(/^\s*#version\s+\d+([^\S\n]+\w+)?\s*$/m, "");
+    const has_float_precision = /precision\s+\w+\s+float/.test(stripped);
+    const has_sampler_precision = /precision\s+\w+\s+sampler2D/.test(stripped);
+    const float_line = has_float_precision ? "" : "precision highp float;\n";
+    const sampler_line = has_sampler_precision ? "" : "precision highp sampler2D;\n";
+    return `#version 300 es\n${float_line}${sampler_line}${stripped}`;
+}
+
+function compile_webgl2_shader(gl, type, source) {
+    const shader = gl.createShader(type);
+    gl.shaderSource(shader, source);
+    gl.compileShader(shader);
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        const log = gl.getShaderInfoLog(shader) || "Shader compile failed";
+        gl.deleteShader(shader);
+        throw new Error(log);
+    }
+    return shader;
+}
+
+function link_webgl2_program(gl, vert_shader, frag_shader) {
+    const program = gl.createProgram();
+    gl.attachShader(program, vert_shader);
+    gl.attachShader(program, frag_shader);
+    gl.linkProgram(program);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+        const log = gl.getProgramInfoLog(program) || "Program link failed";
+        gl.deleteProgram(program);
+        throw new Error(log);
+    }
+    return program;
+}
+
+export function create_webgl2_renderer(canvas_element) {
+    const gl =
+        typeof canvas_element.getContext === "function"
+            ? canvas_element.getContext("webgl2")
+            : null;
+    if (!gl) return null;
+
+    const quad_verts = new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]);
+    const vbo = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+    gl.bufferData(gl.ARRAY_BUFFER, quad_verts, gl.STATIC_DRAW);
+
+    let program = null;
+    let a_pos_loc = -1;
+    let u_time_loc = null;
+    let u_resolution_loc = null;
+    let u_image_loc = null;
+    let gl_texture = null;
+
+    const build_program = (frag_source) => {
+        const vert_shader = compile_webgl2_shader(
+            gl,
+            gl.VERTEX_SHADER,
+            WEBGL2_VERTEX_SOURCE,
+        );
+        const frag_shader = compile_webgl2_shader(
+            gl,
+            gl.FRAGMENT_SHADER,
+            frag_source,
+        );
+        const new_program = link_webgl2_program(gl, vert_shader, frag_shader);
+        gl.deleteShader(vert_shader);
+        gl.deleteShader(frag_shader);
+        if (program) gl.deleteProgram(program);
+        program = new_program;
+        gl.useProgram(program);
+        a_pos_loc = gl.getAttribLocation(program, "a_pos");
+        u_time_loc = gl.getUniformLocation(program, "u_time");
+        u_resolution_loc = gl.getUniformLocation(program, "u_resolution");
+        u_image_loc = gl.getUniformLocation(program, "u_image");
+    };
+
+    const set_fragment_shader = (raw_source) => {
+        const adapted = adapt_fragment_for_webgl2(raw_source);
+        build_program(adapted);
+    };
+
+    const set_image_texture = (image_source) => {
+        if (!image_source) return;
+        if (gl_texture) gl.deleteTexture(gl_texture);
+        gl_texture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, gl_texture);
+        gl.texImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.RGBA,
+            gl.RGBA,
+            gl.UNSIGNED_BYTE,
+            image_source,
+        );
+        gl.generateMipmap(gl.TEXTURE_2D);
+        gl.texParameteri(
+            gl.TEXTURE_2D,
+            gl.TEXTURE_MIN_FILTER,
+            gl.LINEAR_MIPMAP_LINEAR,
+        );
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    };
+
+    const render = (time_secs) => {
+        if (!program) return;
+        const w = canvas_element.width;
+        const h = canvas_element.height;
+        gl.viewport(0, 0, w, h);
+        gl.useProgram(program);
+        gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+        gl.enableVertexAttribArray(a_pos_loc);
+        gl.vertexAttribPointer(a_pos_loc, 2, gl.FLOAT, false, 0, 0);
+        if (u_time_loc !== null) gl.uniform1f(u_time_loc, time_secs);
+        if (u_resolution_loc !== null) gl.uniform2f(u_resolution_loc, w, h);
+        if (u_image_loc !== null && gl_texture) {
+            gl.activeTexture(gl.TEXTURE0);
+            gl.bindTexture(gl.TEXTURE_2D, gl_texture);
+            gl.uniform1i(u_image_loc, 0);
+        }
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    };
+
+    const dispose = () => {
+        if (program) gl.deleteProgram(program);
+        if (gl_texture) gl.deleteTexture(gl_texture);
+        gl.deleteBuffer(vbo);
+    };
+
+    // Load fallback shader so canvas renders immediately
+    build_program(WEBGL2_FALLBACK_FRAGMENT);
+
+    return { set_fragment_shader, set_image_texture, render, dispose, gl };
 }
 
 export async function create_live_glsl_preview({
@@ -228,14 +391,6 @@ export async function create_live_glsl_preview({
     preview_state = {},
     now = default_now,
     shader_loader = loadShader,
-    three_stack_loader = async () => {
-        const [THREE, react_three_fiber, react_three_drei] = await Promise.all([
-            import("three"),
-            import("@react-three/fiber"),
-            import("@react-three/drei"),
-        ]);
-        return { THREE, react_three_fiber, react_three_drei };
-    },
     request_animation_frame = default_request_animation_frame,
     cancel_animation_frame = default_cancel_animation_frame,
 }) {
@@ -243,11 +398,11 @@ export async function create_live_glsl_preview({
         create_canvas_preview_surface(document_ref);
     container_element.appendChild(root_element);
 
-    const start_time = now();
     const safe_effect_name =
         typeof effect_name === "string" && effect_name.length > 0
             ? effect_name
             : "glitch";
+
     const preview_descriptor = create_preview_descriptor({
         fragment_shader_source: "",
         effect_name: safe_effect_name,
@@ -257,42 +412,19 @@ export async function create_live_glsl_preview({
     preview_state.preview_error = "";
 
     const update_overlay_message = () => {
-        if (preview_state.preview_error) {
-            overlay_element.textContent = preview_state.preview_error;
-            return;
-        }
-        overlay_element.textContent = "";
+        overlay_element.textContent = preview_state.preview_error || "";
     };
 
-    let three_stack = null;
-    try {
-        three_stack = await three_stack_loader();
-    } catch (_error) {
-        three_stack = null;
-    }
-    const has_r3f = Boolean(three_stack?.react_three_fiber?.createRoot);
-    const has_drei = Boolean(three_stack?.react_three_drei);
-    preview_descriptor.renderer = has_r3f && has_drei ? "r3f" : "descriptor";
+    const renderer = create_webgl2_renderer(canvas_element);
 
-    let shader_material = null;
-    if (three_stack?.THREE?.ShaderMaterial) {
-        shader_material = new three_stack.THREE.ShaderMaterial({
-            vertexShader: VERTEX_SHADER_SOURCE,
-            fragmentShader: FALLBACK_FRAGMENT_SHADER,
-            uniforms: {
-                u_image: { value: input_image ?? null },
-                u_time: { value: 0 },
-                u_resolution: {
-                    value: new three_stack.THREE.Vector2(
-                        preview_descriptor.uniforms.u_resolution[0],
-                        preview_descriptor.uniforms.u_resolution[1],
-                    ),
-                },
-            },
-        });
+    if (!renderer) {
+        preview_state.preview_error = "WebGL2 not available";
+        update_overlay_message();
     }
-    preview_descriptor.shader_material = shader_material;
-    preview_state.render_backend = preview_descriptor.renderer;
+
+    if (renderer && input_image) {
+        renderer.set_image_texture(input_image);
+    }
 
     let active_shader_request_id = 0;
     const load_shader_for_effect = async (next_effect_name) => {
@@ -300,64 +432,41 @@ export async function create_live_glsl_preview({
         active_shader_request_id = request_id;
         const start_ms = now();
         try {
-            const fragment_shader_source = await shader_loader(next_effect_name);
-            if (request_id !== active_shader_request_id) {
-                return;
-            }
-            preview_descriptor.fragment_shader_source = fragment_shader_source;
-            if (shader_material) {
-                shader_material.fragmentShader = fragment_shader_source;
-                shader_material.needsUpdate = true;
+            const frag_source = await shader_loader(next_effect_name);
+            if (request_id !== active_shader_request_id) return;
+            preview_descriptor.fragment_shader_source = frag_source;
+            if (renderer) {
+                renderer.set_fragment_shader(frag_source);
+                if (input_image) renderer.set_image_texture(input_image);
             }
             preview_state.preview_error = "";
         } catch (error) {
-            if (request_id !== active_shader_request_id) {
-                return;
-            }
-            preview_state.preview_error = `Shader load error: ${error.message}`;
+            if (request_id !== active_shader_request_id) return;
+            preview_state.preview_error = `Shader error: ${error.message}`;
         } finally {
             if (request_id === active_shader_request_id) {
                 preview_state.last_shader_load_ms = now() - start_ms;
+                update_overlay_message();
             }
         }
     };
+
     await load_shader_for_effect(safe_effect_name);
 
-    const update_resolution = () => {
+    const unsubscribe_resize = subscribe_global_resize(() => {
         const [width, height] = get_element_size(canvas_element);
         preview_descriptor.uniforms.u_resolution = [width, height];
-        if (shader_material) {
-            const resolution_uniform = shader_material.uniforms.u_resolution.value;
-            if (
-                resolution_uniform &&
-                typeof resolution_uniform.set === "function"
-            ) {
-                resolution_uniform.set(width, height);
-            }
-        }
-    };
+    });
 
-    const unsubscribe_resize = subscribe_global_resize(update_resolution);
-
-    if (input_image) {
-        canvas_element.style.background = "transparent";
-    } else {
-        canvas_element.style.background = "rgb(128, 128, 128)";
-    }
-    update_overlay_message();
-
+    const start_time = now();
     let animation_handle = null;
     let stopped = false;
+
     const animate = () => {
-        if (stopped) {
-            return;
-        }
-        preview_descriptor.uniforms.u_time = (now() - start_time) / 1000;
-        if (shader_material) {
-            shader_material.uniforms.u_time.value = preview_descriptor.uniforms.u_time;
-            shader_material.uniforms.u_image.value =
-                preview_descriptor.uniforms.u_image;
-        }
+        if (stopped) return;
+        const time_secs = (now() - start_time) / 1000;
+        preview_descriptor.uniforms.u_time = time_secs;
+        if (renderer) renderer.render(time_secs);
         animation_handle = request_animation_frame(animate);
     };
     animation_handle = request_animation_frame(animate);
@@ -368,9 +477,7 @@ export async function create_live_glsl_preview({
         preview_descriptor,
         set_input_image(next_image) {
             preview_descriptor.uniforms.u_image = next_image ?? null;
-            canvas_element.style.background = next_image
-                ? "transparent"
-                : "rgb(128, 128, 128)";
+            if (renderer && next_image) renderer.set_image_texture(next_image);
             update_overlay_message();
         },
         async set_effect(next_effect_name) {
@@ -380,15 +487,10 @@ export async function create_live_glsl_preview({
             update_overlay_message();
         },
         resize(width, height) {
-            if (Number(width) > 0) {
-                canvas_element.width = Number(width);
-                canvas_element.clientWidth = Number(width);
-            }
-            if (Number(height) > 0) {
-                canvas_element.height = Number(height);
-                canvas_element.clientHeight = Number(height);
-            }
-            update_resolution();
+            if (Number(width) > 0) canvas_element.width = Number(width);
+            if (Number(height) > 0) canvas_element.height = Number(height);
+            const [w, h] = get_element_size(canvas_element);
+            preview_descriptor.uniforms.u_resolution = [w, h];
         },
         stop() {
             stopped = true;
@@ -396,16 +498,14 @@ export async function create_live_glsl_preview({
                 cancel_animation_frame(animation_handle);
             }
             unsubscribe_resize();
-            if (shader_material && typeof shader_material.dispose === "function") {
-                shader_material.dispose();
-            }
+            if (renderer) renderer.dispose();
         },
     };
 
     preview_state.preview_controller = controller;
     preview_state.preview_descriptor = preview_descriptor;
     preview_state.effect_name = effect_name;
-    preview_state.preview_error = preview_state.preview_error || "";
+    preview_state.render_backend = "webgl2";
     return controller;
 }
 
@@ -492,6 +592,18 @@ function sync_effect_name_output(node, effect_name) {
     }
 }
 
+function hide_builtin_combo_widget(node) {
+    const widgets = Array.isArray(node.widgets) ? node.widgets : [];
+    // The built-in COMBO widget ComfyUI generates from INPUT_TYPES has type "combo"
+    // and is not a DOM widget. Hide it so only our custom dropdown shows.
+    const combo_widget = widgets.find(
+        (w) => w?.name === "effect_name" && w?.type !== "div",
+    );
+    if (!combo_widget) return;
+    combo_widget.hidden = true;
+    combo_widget.computeSize = () => [0, -4];
+}
+
 export async function mount_effect_selector_widget_for_node({
     node,
     document_ref = globalThis.document,
@@ -512,8 +624,19 @@ export async function mount_effect_selector_widget_for_node({
         node.__cool_effects_widget_state.preview_controller.stop();
     }
 
+    // Hide the auto-generated COMBO widget from ComfyUI so only our dropdown shows
+    hide_builtin_combo_widget(node);
+
     const container_element = document_ref.createElement("div");
     container_element.setAttribute("data-widget", "cool-effects");
+    Object.assign(container_element.style, {
+        display: "flex",
+        flexDirection: "column",
+        gap: "6px",
+        padding: "6px 8px 8px",
+        boxSizing: "border-box",
+        width: "100%",
+    });
     const widget = node.addDOMWidget(
         "effect_selector",
         "div",
@@ -599,7 +722,10 @@ export function register_comfy_extension(
                 const preview_controller =
                     this.__cool_effects_widget_state?.preview_state
                         ?.preview_controller;
-                if (preview_controller && typeof preview_controller.stop === "function") {
+                if (
+                    preview_controller &&
+                    typeof preview_controller.stop === "function"
+                ) {
                     preview_controller.stop();
                 }
                 if (typeof previous_on_removed === "function") {
