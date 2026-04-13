@@ -29,3 +29,13 @@
 **Pitfalls Encountered:** Runtime `torch`-dependent tests may be skipped in minimal environments, so AST contract tests were expanded to enforce loop placement, float casting, and missing-uniform skip semantics independent of runtime dependencies.
 
 **Useful Context for Future Agents:** The fake ModernGL test doubles now support strict uniform availability (`strict_missing=True`) and per-assignment history (`uniform.values`), which is useful for validating uniform update cadence and skip behavior without a real GL context.
+
+## US-004 — Backward-compatible frame output
+
+**Summary:** Added focused compatibility tests for `CoolVideoGenerator` to lock output batch shape (`[N, H, W, 3]`), `float32` dtype, normalized value range `[0, 1]`, unchanged frame-count rule `N = round(duration * fps)`, and unchanged `fps`/`duration` widget definitions.
+
+**Key Decisions:** Kept production rendering code unchanged because it already satisfied the story contract, and reinforced behavior through runtime tests with the existing fake ModernGL harness.
+
+**Pitfalls Encountered:** Python `round` uses bankers rounding (e.g., `round(2.5) == 2`), so frame-count tests were written with values that clearly differentiate `round` from truncation-only behavior.
+
+**Useful Context for Future Agents:** `tests/test_video_generator_node.py` now has explicit backward-compatibility tests for this story, so future refactors touching output assembly, frame loop logic, or input metadata should update these tests if intentional contract changes are introduced.

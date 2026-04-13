@@ -266,6 +266,48 @@ def test_video_generator_rounds_total_frames_from_duration_times_fps(monkeypatch
     assert fake_moderngl.latest_context.vertex_array_object.rendered_times == [0.0, 1.0 / 3.0]
 
 
+def test_video_generator_backward_compatible_output_tensor_shape_dtype_and_range(monkeypatch):
+    module = _load_module(NODE_PATH)
+    fake_moderngl = _FakeModerngl()
+    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
+    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
+
+    node = module.CoolVideoGenerator()
+    image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
+    output, = node.execute(image=image, effect_params=_build_effect_params("glitch"), fps=5, duration=0.6)
+
+    assert output.shape == (3, 2, 3, 3)
+    assert output.dtype == torch.float32
+    assert output.min().item() >= 0.0
+    assert output.max().item() <= 1.0
+
+
+def test_video_generator_backward_compatible_frame_count_uses_round(monkeypatch):
+    module = _load_module(NODE_PATH)
+    fake_moderngl = _FakeModerngl()
+    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
+    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
+
+    node = module.CoolVideoGenerator()
+    image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
+    output, = node.execute(image=image, effect_params=_build_effect_params("glitch"), fps=3, duration=0.55)
+
+    assert output.shape[0] == round(0.55 * 3)
+    assert output.shape[0] == 2
+    assert fake_moderngl.latest_context.vertex_array_object.rendered_times == [0.0, 1.0 / 3.0]
+
+
+def test_video_generator_backward_compatible_fps_and_duration_input_definitions():
+    module = _load_module(NODE_PATH)
+    required_inputs = module.CoolVideoGenerator.INPUT_TYPES()["required"]
+
+    assert required_inputs["fps"] == ("INT", {"default": 30, "min": 1, "max": 60})
+    assert required_inputs["duration"] == (
+        "FLOAT",
+        {"default": 3.0, "min": 0.5, "max": 60.0, "step": 0.5},
+    )
+
+
 def test_video_generator_reads_rgb_bytes_per_frame(monkeypatch):
     module = _load_module(NODE_PATH)
     fake_moderngl = _FakeModerngl()
