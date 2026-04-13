@@ -19,3 +19,13 @@
 **Pitfalls Encountered:** Existing full-suite baseline failures are unrelated to this story (`tests/test_effect_selector_widget.py`), so validation focused on shader/default-param tests tied to the acceptance criteria.
 
 **Useful Context for Future Agents:** For additional shaders in this PRD series, update `tests/test_initial_shaders.py` (`EXPECTED_SHADERS`, directional formula assertions, README assertions) and `tests/test_effect_params.py` together to keep contract and default coverage aligned.
+
+## US-003 — Pan Up shader renders a bottom-to-top scrolling animation
+
+**Summary:** Added `pan_up.frag` with wrapped upward UV scrolling from configurable origins, registered `pan_up` in `DEFAULT_PARAMS`, and expanded shader contract/default tests plus shader README coverage.
+
+**Key Decisions:** Reused the same panning structure from `pan_left`/`pan_right` and only changed scroll direction to `+Y` via `vec2(0.0, u_speed * u_time)` with `fract(origin_uv + scroll_offset)` for wrap behavior.
+
+**Pitfalls Encountered:** Existing unrelated widget/JS loader tests still fail in baseline; validation remained focused on shader/default tests tied to this story's acceptance criteria.
+
+**Useful Context for Future Agents:** For the pan-family shaders, keep `u_speed`, `u_origin_x`, `u_origin_y` uniform/default contracts identical and change only the directional scroll vector to avoid behavioral drift.
