@@ -1087,14 +1087,21 @@ const canvas_element = {{
 const renderer = create_webgl2_renderer(canvas_element);
 renderer.set_uniform("u_speed", 2.25);
 renderer.set_uniform("u_missing", 3.5);
+renderer.set_uniform("u_speed", 4.0);
+renderer.set_uniform("u_speed", Number.NaN);
 console.log(JSON.stringify({{
     uniformLookups: renderer.gl.uniformLookups,
     uniformCalls: renderer.gl.uniformCalls,
 }}));
 """
     output = _run_node_module(script)
+    assert output["uniformLookups"].count("u_speed") == 1
+    assert output["uniformLookups"].count("u_missing") == 1
     assert output["uniformLookups"][-2:] == ["u_speed", "u_missing"]
-    assert output["uniformCalls"] == [{"location": "u_speed", "value": 2.25}]
+    assert output["uniformCalls"] == [
+        {"location": "u_speed", "value": 2.25},
+        {"location": "u_speed", "value": 4.0},
+    ]
 
 
 def test_webgl2_renderer_set_uniform_does_not_throw_when_program_is_null():

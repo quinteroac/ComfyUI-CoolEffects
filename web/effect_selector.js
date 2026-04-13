@@ -300,6 +300,19 @@ export function create_webgl2_renderer(canvas_element) {
     let u_resolution_loc = null;
     let u_image_loc = null;
     let gl_texture = null;
+    const uniform_location_cache = new Map();
+
+    const get_uniform_location = (name) => {
+        if (!program) {
+            return null;
+        }
+        if (uniform_location_cache.has(name)) {
+            return uniform_location_cache.get(name);
+        }
+        const location = gl.getUniformLocation(program, name);
+        uniform_location_cache.set(name, location);
+        return location;
+    };
 
     const build_program = (frag_source) => {
         const vert_shader = compile_webgl2_shader(
@@ -317,11 +330,12 @@ export function create_webgl2_renderer(canvas_element) {
         gl.deleteShader(frag_shader);
         if (program) gl.deleteProgram(program);
         program = new_program;
+        uniform_location_cache.clear();
         gl.useProgram(program);
         a_pos_loc = gl.getAttribLocation(program, "a_pos");
-        u_time_loc = gl.getUniformLocation(program, "u_time");
-        u_resolution_loc = gl.getUniformLocation(program, "u_resolution");
-        u_image_loc = gl.getUniformLocation(program, "u_image");
+        u_time_loc = get_uniform_location("u_time");
+        u_resolution_loc = get_uniform_location("u_resolution");
+        u_image_loc = get_uniform_location("u_image");
     };
 
     const set_fragment_shader = (raw_source) => {
@@ -354,10 +368,12 @@ export function create_webgl2_renderer(canvas_element) {
 
     const set_uniform = (name, value) => {
         if (!program) return;
-        const uniform_location = gl.getUniformLocation(program, name);
+        const numeric_value = Number(value);
+        if (!Number.isFinite(numeric_value)) return;
+        const uniform_location = get_uniform_location(name);
         if (uniform_location === null) return;
         gl.useProgram(program);
-        gl.uniform1f(uniform_location, value);
+        gl.uniform1f(uniform_location, numeric_value);
     };
 
     const render = (time_secs) => {

@@ -1,32 +1,28 @@
-import { loadShader } from "./shaders/loader.js";
 import {
-    create_live_glsl_preview,
-    create_placeholder_texture,
-} from "./effect_selector.js";
+    apply_effect_widget_uniform_from_widget,
+    mount_effect_node_widget,
+    stop_effect_node_widget_preview,
+} from "./effect_node_widget.js";
+import { loadShader } from "./shaders/loader.js";
 
 export const EXTENSION_NAME = "Comfy.CoolEffects.GlitchEffect";
-const GLITCH_WIDGET_UNIFORM_MAP = Object.freeze({
-    wave_freq: "u_wave_freq",
-    wave_amp: "u_wave_amp",
-    speed: "u_speed",
-});
-
-function apply_uniform_from_widget(node, widget_name, widget_value) {
-    const uniform_name = GLITCH_WIDGET_UNIFORM_MAP[widget_name];
-    if (!uniform_name) {
-        return;
-    }
-    const preview_controller =
-        node?.__cool_glitch_widget_state?.preview_state?.preview_controller;
-    if (!preview_controller || typeof preview_controller.set_uniform !== "function") {
-        return;
-    }
-    const numeric_value = Number(widget_value);
-    if (!Number.isFinite(numeric_value)) {
-        return;
-    }
-    preview_controller.set_uniform(uniform_name, numeric_value);
-}
+const GLITCH_PARAM_SPECS = Object.freeze([
+    Object.freeze({
+        widget_name: "wave_freq",
+        uniform_name: "u_wave_freq",
+        default_value: 120.0,
+    }),
+    Object.freeze({
+        widget_name: "wave_amp",
+        uniform_name: "u_wave_amp",
+        default_value: 0.0025,
+    }),
+    Object.freeze({
+        widget_name: "speed",
+        uniform_name: "u_speed",
+        default_value: 10.0,
+    }),
+]);
 
 export async function mount_glitch_effect_widget_for_node({
     node,
@@ -39,59 +35,13 @@ export async function mount_glitch_effect_widget_for_node({
             ? globalThis.performance.now()
             : Date.now(),
 }) {
-    if (!node || typeof node.addDOMWidget !== "function") {
-        return null;
-    }
-    if (!document_ref || typeof document_ref.createElement !== "function") {
-        throw new Error("Missing document reference for glitch effect widget");
-    }
-
-    if (node.__cool_glitch_widget_state?.preview_controller) {
-        node.__cool_glitch_widget_state.preview_controller.stop();
-    }
-
-    const container_element = document_ref.createElement("div");
-    container_element.setAttribute("data-widget", "cool-glitch-effect");
-    Object.assign(container_element.style, {
-        display: "flex",
-        flexDirection: "column",
-        padding: "6px 8px 8px",
-        boxSizing: "border-box",
-        width: "100%",
-    });
-
-    const widget = node.addDOMWidget(
-        "glitch_preview",
-        "div",
-        container_element,
-        {
-            serialize: false,
-            hideOnZoom: false,
-        },
-    );
-
-    const preview_state = {};
-    node.__cool_glitch_widget_state = {
-        preview_state,
-        widget,
-        container_element,
-    };
-
-    const placeholder_texture = create_placeholder_texture(document_ref, 512);
-    await create_live_glsl_preview({
+    return mount_effect_node_widget(node, "glitch", GLITCH_PARAM_SPECS, {
         document_ref,
-        container_element,
-        effect_name: "glitch",
-        input_image: placeholder_texture,
-        preview_state,
-        keep_webgl_error_on_shader_load: true,
         shader_loader,
         request_animation_frame,
         cancel_animation_frame,
         now,
     });
-
-    return node.__cool_glitch_widget_state;
 }
 
 export function register_comfy_extension(
@@ -136,14 +86,7 @@ export function register_comfy_extension(
             };
 
             nodeType.prototype.onRemoved = function onRemoved() {
-                const preview_controller =
-                    this.__cool_glitch_widget_state?.preview_state?.preview_controller;
-                if (
-                    preview_controller &&
-                    typeof preview_controller.stop === "function"
-                ) {
-                    preview_controller.stop();
-                }
+                stop_effect_node_widget_preview(this, "glitch");
                 if (typeof previous_on_removed === "function") {
                     previous_on_removed.apply(this, arguments);
                 }
@@ -154,7 +97,13 @@ export function register_comfy_extension(
                     previous_on_widget_changed.apply(this, arguments);
                 }
                 const [widget_name, widget_value] = arguments;
-                apply_uniform_from_widget(this, widget_name, widget_value);
+                apply_effect_widget_uniform_from_widget(
+                    this,
+                    "glitch",
+                    GLITCH_PARAM_SPECS,
+                    widget_name,
+                    widget_value,
+                );
             };
         },
     });

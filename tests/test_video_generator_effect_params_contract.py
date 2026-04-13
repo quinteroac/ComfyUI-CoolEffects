@@ -14,6 +14,10 @@ def _get_cool_video_generator_class() -> ast.ClassDef:
     raise AssertionError("CoolVideoGenerator class not found")
 
 
+def _get_module_tree() -> ast.Module:
+    return ast.parse(NODE_PATH.read_text(encoding="utf-8"))
+
+
 def _get_method(class_node: ast.ClassDef, method_name: str) -> ast.FunctionDef:
     for node in class_node.body:
         if isinstance(node, ast.FunctionDef) and node.name == method_name:
@@ -28,24 +32,62 @@ def _subscript_string_key(node: ast.Subscript) -> str | None:
     return None
 
 
+def _dict_value_for_key(dict_node: ast.Dict, key: str):
+    for existing_key, value in zip(dict_node.keys, dict_node.values):
+        if isinstance(existing_key, ast.Constant) and existing_key.value == key:
+            return value
+    raise AssertionError(f"Key '{key}' not found")
+
+
+def test_video_generator_loads_effect_params_constant_from_effect_params_module():
+    module_tree = _get_module_tree()
+
+    assignments = [
+        node for node in module_tree.body
+        if isinstance(node, ast.Assign)
+        and len(node.targets) == 1
+        and isinstance(node.targets[0], ast.Name)
+        and node.targets[0].id == "EFFECT_PARAMS"
+    ]
+    assert assignments, "EFFECT_PARAMS must be assigned at module scope"
+
+    value = assignments[0].value
+    assert isinstance(value, ast.Attribute)
+    assert isinstance(value.value, ast.Name)
+    assert value.value.id == "_effect_params_module"
+    assert value.attr == "EFFECT_PARAMS"
+
+
 def test_input_types_declares_effect_params_as_required_effect_params_type():
     class_node = _get_cool_video_generator_class()
     input_types_method = _get_method(class_node, "INPUT_TYPES")
     return_statement = next(node for node in input_types_method.body if isinstance(node, ast.Return))
-    input_types = ast.literal_eval(return_statement.value)
-    required_inputs = input_types["required"]
+    input_types = return_statement.value
+    assert isinstance(input_types, ast.Dict)
+    required_inputs = _dict_value_for_key(input_types, "required")
+    assert isinstance(required_inputs, ast.Dict)
+    effect_params_input = _dict_value_for_key(required_inputs, "effect_params")
+    assert isinstance(effect_params_input, ast.Tuple)
+    assert len(effect_params_input.elts) == 1
+    assert isinstance(effect_params_input.elts[0], ast.Name)
 
-    assert required_inputs["effect_params"] == ("EFFECT_PARAMS",)
+    assert effect_params_input.elts[0].id == "EFFECT_PARAMS"
 
 
 def test_input_types_does_not_include_effect_name_string_input():
     class_node = _get_cool_video_generator_class()
     input_types_method = _get_method(class_node, "INPUT_TYPES")
     return_statement = next(node for node in input_types_method.body if isinstance(node, ast.Return))
-    input_types = ast.literal_eval(return_statement.value)
-    required_inputs = input_types["required"]
+    input_types = return_statement.value
+    assert isinstance(input_types, ast.Dict)
+    required_inputs = _dict_value_for_key(input_types, "required")
+    assert isinstance(required_inputs, ast.Dict)
 
-    assert "effect_name" not in required_inputs
+    required_keys = {
+        key.value for key in required_inputs.keys
+        if isinstance(key, ast.Constant) and isinstance(key.value, str)
+    }
+    assert "effect_name" not in required_keys
 
 
 def test_execute_signature_accepts_effect_params_input():

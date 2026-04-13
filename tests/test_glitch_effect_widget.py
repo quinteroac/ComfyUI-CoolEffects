@@ -92,6 +92,7 @@ console.log(JSON.stringify({{
     effectName: controller.preview_descriptor.effect_name,
     placeholderTag: controller.preview_descriptor.uniforms.u_image?.tagName ?? null,
     hasCanvas: controller.canvas_element.tagName,
+    uniforms: controller.preview_descriptor.uniforms,
 }}));
 """
     output = _run_node_module(script)
@@ -99,6 +100,9 @@ console.log(JSON.stringify({{
     assert output["effectName"] == "glitch"
     assert output["placeholderTag"] == "canvas"
     assert output["hasCanvas"] == "canvas"
+    assert output["uniforms"]["u_wave_freq"] == 120.0
+    assert output["uniforms"]["u_wave_amp"] == 0.0025
+    assert output["uniforms"]["u_speed"] == 10.0
 
 
 def test_registers_glitch_extension_and_mounts_widget_on_node_create():

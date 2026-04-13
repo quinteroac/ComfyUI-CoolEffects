@@ -92,6 +92,7 @@ console.log(JSON.stringify({{
     effectName: controller.preview_descriptor.effect_name,
     placeholderTag: controller.preview_descriptor.uniforms.u_image?.tagName ?? null,
     hasCanvas: controller.canvas_element.tagName,
+    uniforms: controller.preview_descriptor.uniforms,
 }}));
 """
     output = _run_node_module(script)
@@ -99,6 +100,9 @@ console.log(JSON.stringify({{
     assert output["effectName"] == "vhs"
     assert output["placeholderTag"] == "canvas"
     assert output["hasCanvas"] == "canvas"
+    assert output["uniforms"]["u_scanline_intensity"] == 0.04
+    assert output["uniforms"]["u_jitter_amount"] == 0.0018
+    assert output["uniforms"]["u_chroma_shift"] == 0.002
 
 
 def test_registers_vhs_extension_and_mounts_widget_on_node_create():

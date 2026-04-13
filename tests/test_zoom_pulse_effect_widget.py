@@ -92,6 +92,7 @@ console.log(JSON.stringify({{
     effectName: controller.preview_descriptor.effect_name,
     placeholderTag: controller.preview_descriptor.uniforms.u_image?.tagName ?? null,
     hasCanvas: controller.canvas_element.tagName,
+    uniforms: controller.preview_descriptor.uniforms,
 }}));
 """
     output = _run_node_module(script)
@@ -99,6 +100,8 @@ console.log(JSON.stringify({{
     assert output["effectName"] == "zoom_pulse"
     assert output["placeholderTag"] == "canvas"
     assert output["hasCanvas"] == "canvas"
+    assert output["uniforms"]["u_pulse_amp"] == 0.06
+    assert output["uniforms"]["u_pulse_speed"] == 3.0
 
 
 def test_registers_zoom_pulse_extension_and_mounts_widget_on_node_create():

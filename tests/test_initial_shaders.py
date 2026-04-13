@@ -138,3 +138,17 @@ def test_shader_readme_documents_uniform_contract():
     assert "`uniform sampler2D u_image`" in content
     assert "`uniform float u_time`" in content
     assert "`uniform vec2 u_resolution`" in content
+    assert "Per-effect uniforms and defaults" in content
+    assert "### `glitch.frag`" in content
+    assert "`uniform float u_wave_freq` — default: `120.0`" in content
+    assert "`uniform float u_wave_amp` — default: `0.0025`" in content
+    assert "`uniform float u_speed` — default: `10.0`" in content
+    assert "### `vhs.frag`" in content
+    assert (
+        "`uniform float u_scanline_intensity` — default: `0.04`" in content
+    )
+    assert "`uniform float u_jitter_amount` — default: `0.0018`" in content
+    assert "`uniform float u_chroma_shift` — default: `0.002`" in content
+    assert "### `zoom_pulse.frag`" in content
+    assert "`uniform float u_pulse_amp` — default: `0.06`" in content
+    assert "`uniform float u_pulse_speed` — default: `3.0`" in content

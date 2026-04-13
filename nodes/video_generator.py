@@ -26,6 +26,7 @@ if _EFFECT_PARAMS_SPEC is None or _EFFECT_PARAMS_SPEC.loader is None:
     raise ValueError(f"Missing effect params config at {_EFFECT_PARAMS_PATH}")
 _effect_params_module = importlib.util.module_from_spec(_EFFECT_PARAMS_SPEC)
 _EFFECT_PARAMS_SPEC.loader.exec_module(_effect_params_module)
+EFFECT_PARAMS = _effect_params_module.EFFECT_PARAMS
 merge_params = _effect_params_module.merge_params
 
 _FULLSCREEN_QUAD_VERTICES = np.array(
@@ -80,7 +81,7 @@ class CoolVideoGenerator:
         return {
             "required": {
                 "image": ("IMAGE",),
-                "effect_params": ("EFFECT_PARAMS",),
+                "effect_params": (EFFECT_PARAMS,),
                 "fps": ("INT", {"default": 30, "min": 1, "max": 60}),
                 "duration": ("FLOAT", {"default": 3.0, "min": 0.5, "max": 60.0, "step": 0.5}),
             }

@@ -1,52 +1,26 @@
 {
-  "current_iteration": "000003",
-  "current_phase": "prototype",
+  "current_iteration": "000004",
+  "current_phase": "define",
   "phases": {
     "define": {
       "ideation": {
-        "status": "completed",
+        "status": "pending",
         "file": null
       },
       "requirement_definition": [
         {
           "index": 1,
           "status": "approved",
-          "file": "it_000003_product-requirement-document_001.md"
-        },
-        {
-          "index": 2,
-          "status": "approved",
-          "file": "it_000003_product-requirement-document_002.md"
-        },
-        {
-          "index": 3,
-          "status": "approved",
-          "file": "it_000003_product-requirement-document_003.md"
+          "file": "it_000004_product-requirement-document_001.md"
         }
       ],
       "prd_generation": {
         "status": "completed",
-        "file": "it_000003_PRD_003.json"
+        "file": "it_000004_PRD_001.json"
       }
     },
     "prototype": {
-      "prototype_creation": [
-        {
-          "index": 1,
-          "status": "in_progress",
-          "file": "it_000003_prototype-creation_001.json"
-        },
-        {
-          "index": 2,
-          "status": "in_progress",
-          "file": "it_000003_prototype-creation_002.json"
-        },
-        {
-          "index": 3,
-          "status": "in_progress",
-          "file": "it_000003_prototype-creation_003.json"
-        }
-      ],
+      "prototype_creation": [],
       "prototype_audit": [],
       "prototype_refactor": [],
       "prototype_approval": {
@@ -94,6 +68,6 @@
       }
     }
   },
-  "last_updated": "2026-04-13T04:36:46.046Z",
-  "updated_by": "nvst:create-prototype"
+  "last_updated": "2026-04-13T15:10:52.444Z",
+  "updated_by": "nvst:approve-requirement"
 }
