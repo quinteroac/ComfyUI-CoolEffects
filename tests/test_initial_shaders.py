@@ -8,7 +8,7 @@ PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 LOADER_PATH = PACKAGE_ROOT / "shaders" / "loader.py"
 GLSL_DIR = PACKAGE_ROOT / "shaders" / "glsl"
 README_PATH = PACKAGE_ROOT / "shaders" / "README.md"
-EXPECTED_SHADERS = ("glitch", "vhs", "zoom_pulse")
+EXPECTED_SHADERS = ("glitch", "vhs", "zoom_pulse", "pan_left")
 
 VERTEX_SHADER_SOURCE = """
 #version 330
@@ -109,6 +109,22 @@ def test_zoom_pulse_shader_has_no_hardcoded_per_effect_constants():
     assert "u_time * 3.0" not in source
 
 
+def test_pan_left_shader_declares_per_effect_uniforms():
+    source = _load_loader_module().load_shader("pan_left")
+
+    assert "uniform float u_speed;" in source
+    assert "uniform float u_origin_x;" in source
+    assert "uniform float u_origin_y;" in source
+
+
+def test_pan_left_shader_starts_at_origin_and_scrolls_left_with_wrapped_uv():
+    source = _load_loader_module().load_shader("pan_left")
+
+    assert "vec2 origin_uv = uv + vec2(u_origin_x, u_origin_y);" in source
+    assert "vec2 scroll_offset = vec2(-u_speed * u_time, 0.0);" in source
+    assert "vec2 wrapped_uv = fract(origin_uv + scroll_offset);" in source
+
+
 def test_shaders_compile_in_moderngl():
     moderngl = pytest.importorskip("moderngl")
     loader_module = _load_loader_module()
@@ -152,3 +168,7 @@ def test_shader_readme_documents_uniform_contract():
     assert "### `zoom_pulse.frag`" in content
     assert "`uniform float u_pulse_amp` — default: `0.06`" in content
     assert "`uniform float u_pulse_speed` — default: `3.0`" in content
+    assert "### `pan_left.frag`" in content
+    assert "`uniform float u_speed` — default: `0.1`" in content
+    assert "`uniform float u_origin_x` — default: `0.0`" in content
+    assert "`uniform float u_origin_y` — default: `0.0`" in content

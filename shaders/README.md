@@ -38,3 +38,9 @@ Defaults below mirror `nodes/effect_params.py` (`DEFAULT_PARAMS`) and preserve b
 
 - `uniform float u_pulse_amp` — default: `0.06`
 - `uniform float u_pulse_speed` — default: `3.0`
+
+### `pan_left.frag`
+
+- `uniform float u_speed` — default: `0.1`
+- `uniform float u_origin_x` — default: `0.0`
+- `uniform float u_origin_y` — default: `0.0`

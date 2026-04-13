@@ -17,6 +17,11 @@ DEFAULT_PARAMS: dict[str, dict] = {
         "u_pulse_amp": 0.06,
         "u_pulse_speed": 3.0,
     },
+    "pan_left": {
+        "u_speed": 0.1,
+        "u_origin_x": 0.0,
+        "u_origin_y": 0.0,
+    },
 }
 
 

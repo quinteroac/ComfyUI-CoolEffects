@@ -67,6 +67,11 @@ def test_default_params_contains_original_defaults_for_all_effects():
         "u_pulse_amp": 0.06,
         "u_pulse_speed": 3.0,
     }
+    assert module.DEFAULT_PARAMS["pan_left"] == {
+        "u_speed": 0.1,
+        "u_origin_x": 0.0,
+        "u_origin_y": 0.0,
+    }
 
 
 def test_merge_params_overrides_defaults_with_incoming_params():
