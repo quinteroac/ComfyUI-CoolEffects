@@ -1,0 +1,32 @@
+"""Shared EFFECT_PARAMS contract and per-effect default uniforms."""
+
+EFFECT_PARAMS = "EFFECT_PARAMS"
+
+DEFAULT_PARAMS: dict[str, dict] = {
+    "glitch": {
+        "u_wave_freq": 120.0,
+        "u_wave_amp": 0.0025,
+        "u_speed": 10.0,
+    },
+    "vhs": {
+        "u_scanline_intensity": 0.04,
+        "u_jitter_amount": 0.0018,
+        "u_chroma_shift": 0.002,
+    },
+    "zoom_pulse": {
+        "u_pulse_amp": 0.06,
+        "u_pulse_speed": 3.0,
+    },
+}
+
+
+def build_effect_params(effect_name: str, params: dict) -> dict:
+    if not effect_name:
+        raise ValueError("effect_name must be a non-empty string")
+    if not isinstance(params, dict):
+        raise ValueError("params must be a dict")
+    return {"effect_name": effect_name, "params": params}
+
+
+def merge_params(effect_name: str, params: dict) -> dict:
+    return {**DEFAULT_PARAMS[effect_name], **params}
