@@ -282,6 +282,30 @@ def test_video_generator_backward_compatible_output_tensor_shape_dtype_and_range
     assert output.max().item() <= 1.0
 
 
+def test_video_generator_backward_compatible_single_image_tensor_shapes(monkeypatch):
+    module = _load_module(NODE_PATH)
+    fake_moderngl = _FakeModerngl()
+    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
+    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
+    monkeypatch.setattr(module, "load_vertex_shader", lambda _name: "vertex-source")
+
+    node = module.CoolVideoGenerator()
+    single_image = torch.rand((2, 3, 3), dtype=torch.float32)
+    batched_single_image = single_image.unsqueeze(0)
+    effect_params = _build_effect_params("glitch")
+
+    output_from_single, = node.execute(
+        image=single_image, effect_params=effect_params, fps=3, duration=1.0
+    )
+    output_from_batch, = node.execute(
+        image=batched_single_image, effect_params=effect_params, fps=3, duration=1.0
+    )
+
+    assert output_from_single.shape == (3, 2, 3, 3)
+    assert output_from_batch.shape == (3, 2, 3, 3)
+    assert torch.equal(output_from_single, output_from_batch)
+
+
 def test_video_generator_backward_compatible_frame_count_uses_round(monkeypatch):
     module = _load_module(NODE_PATH)
     fake_moderngl = _FakeModerngl()
