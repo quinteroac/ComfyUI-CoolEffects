@@ -19,3 +19,13 @@
 **Pitfalls Encountered:** The repository-wide pytest suite still contains pre-existing failures in effect selector/web shader loader tests; story validation relied on focused US-001/US-002 node+widget tests to confirm no regressions in the touched surfaces.
 
 **Useful Context for Future Agents:** `web/vhs_effect.js` follows the same test harness contract as `web/glitch_effect.js` (fake DOM canvas + injected shader loader + `preview_descriptor` assertions), so new per-effect widgets can be added quickly by cloning this structure and renaming effect/node/state keys.
+
+## US-003 — CoolZoomPulseEffect node
+
+**Summary:** Implemented `CoolZoomPulseEffect` with pulse amplitude/speed FLOAT controls, `EFFECT_PARAMS` output contract, package registration, and a dedicated frontend widget that mounts a live animated preview for `zoom_pulse.frag` using the placeholder canvas texture.
+
+**Key Decisions:** Followed the existing per-effect architecture used by glitch/vhs nodes: dynamic `effect_params` module loading in Python, explicit node/display registration in `__init__.py`, and a standalone web extension file that reuses `create_live_glsl_preview` + `create_placeholder_texture` from `web/effect_selector.js`.
+
+**Pitfalls Encountered:** Full-suite pytest still reports pre-existing failures in effect selector and web shader loader tests unrelated to US-003 changes; verification was performed with focused node/widget suites covering glitch, vhs, and the new zoom pulse surfaces.
+
+**Useful Context for Future Agents:** For new effect widgets, the most stable test contract is asserting `preview_state.preview_controller.preview_descriptor.effect_name` and shader loader calls in a fake DOM harness; this avoids coupling tests to broader effect selector internals that currently have unrelated drift.
