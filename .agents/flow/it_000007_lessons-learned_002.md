@@ -29,3 +29,13 @@
 **Pitfalls Encountered:** The local environment still lacks `pytest`, so test execution cannot be completed in-session even though the new tests follow established patterns and assertions.
 
 **Useful Context for Future Agents:** For new directional effect nodes, cloning the existing pan-left/right structure is low risk; include both registration and display-name assertions in node tests to catch package wiring regressions.
+
+## US-004 — CoolPanDownEffect node produces valid EFFECT_PARAMS
+
+**Summary:** Added `CoolPanDownEffect` in `nodes/pan_down_effect.py` with the same float input schema as the other pan-direction nodes, wired it in `__init__.py`, and added focused tests in `tests/test_pan_down_effect_node.py`.
+
+**Key Decisions:** Reused the established `importlib.util.spec_from_file_location` module-loading pattern and preserved the same node metadata contract (`RETURN_TYPES`, `RETURN_NAMES`, `FUNCTION`, `CATEGORY`) so the node integrates consistently with existing effect nodes.
+
+**Pitfalls Encountered:** `pytest` is still unavailable in this environment (`pytest: command not found`), preventing local test execution despite implementing the test coverage.
+
+**Useful Context for Future Agents:** For additional directional node stories, copy the most recent pan-node test template and only adjust effect identifier/display strings to keep AC coverage complete and consistent.
