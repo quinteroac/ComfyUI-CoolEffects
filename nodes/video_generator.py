@@ -18,6 +18,16 @@ _LOADER_SPEC.loader.exec_module(_shader_loader_module)
 load_shader = _shader_loader_module.load_shader
 load_vertex_shader = _shader_loader_module.load_vertex_shader
 
+_EFFECT_PARAMS_PATH = Path(__file__).resolve().parent / "effect_params.py"
+_EFFECT_PARAMS_SPEC = importlib.util.spec_from_file_location(
+    "cool_effects_effect_params_for_video_generator", _EFFECT_PARAMS_PATH
+)
+if _EFFECT_PARAMS_SPEC is None or _EFFECT_PARAMS_SPEC.loader is None:
+    raise ValueError(f"Missing effect params config at {_EFFECT_PARAMS_PATH}")
+_effect_params_module = importlib.util.module_from_spec(_EFFECT_PARAMS_SPEC)
+_EFFECT_PARAMS_SPEC.loader.exec_module(_effect_params_module)
+merge_params = _effect_params_module.merge_params
+
 _FULLSCREEN_QUAD_VERTICES = np.array(
     [
         -1.0,
@@ -83,6 +93,13 @@ class CoolVideoGenerator:
 
     def execute(self, image, effect_params, fps, duration):
         effect_name = _extract_effect_name(effect_params)
+        if not isinstance(effect_params.get("params"), dict):
+            raise ValueError("effect_params.params must be a dict")
+        try:
+            final_uniform_params = merge_params(effect_params["effect_name"], effect_params["params"])
+        except KeyError as error:
+            raise ValueError(f"Unknown effect in effect_params: '{effect_name}'") from error
+
         try:
             fragment_shader_source = load_shader(effect_name)
         except FileNotFoundError as error:
@@ -121,6 +138,8 @@ class CoolVideoGenerator:
             input_texture.use(location=0)
             program["u_image"].value = 0
             program["u_resolution"].value = (width, height)
+            for uniform_name, uniform_value in final_uniform_params.items():
+                program[uniform_name].value = uniform_value
 
             for frame_index in range(frame_count):
                 program["u_time"].value = frame_index / fps

@@ -52,6 +52,8 @@ class _FakeProgram:
         self.released = False
 
     def __getitem__(self, key):
+        if key not in self.uniforms:
+            self.uniforms[key] = _FakeUniform()
         return self.uniforms[key]
 
     def release(self):
@@ -361,17 +363,52 @@ def test_video_generator_binds_u_image_texture_and_resolution(monkeypatch):
     assert program["u_resolution"].value == (3, 2)
 
 
-def test_video_generator_raises_value_error_when_shader_missing(monkeypatch):
+def test_video_generator_uses_default_uniforms_when_effect_params_are_empty(monkeypatch):
     module = _load_module(NODE_PATH)
-    monkeypatch.setattr(module, "load_shader", lambda _name: (_ for _ in ()).throw(FileNotFoundError("missing_effect")))
+    fake_moderngl = _FakeModerngl()
+    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
+    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
+
+    node = module.CoolVideoGenerator()
+    image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
+    effect_params = _build_effect_params("glitch", {})
+    node.execute(image=image, effect_params=effect_params, fps=1, duration=1.0)
+
+    program = fake_moderngl.latest_context.program_object
+    assert program["u_wave_freq"].value == 120.0
+    assert program["u_wave_amp"].value == 0.0025
+    assert program["u_speed"].value == 10.0
+
+
+def test_video_generator_raises_value_error_for_unknown_effect_params_effect(monkeypatch):
+    module = _load_module(NODE_PATH)
+    fake_moderngl = _FakeModerngl()
+    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
+    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
 
     node = module.CoolVideoGenerator()
     image = torch.ones((1, 2, 2, 3), dtype=torch.float32)
 
-    with pytest.raises(ValueError, match="effect_name 'missing_effect'"):
+    with pytest.raises(ValueError, match="Unknown effect.*unknown_effect"):
         node.execute(
             image=image,
-            effect_params=_build_effect_params("missing_effect"),
+            effect_params=_build_effect_params("unknown_effect"),
+            fps=1,
+            duration=1.0,
+        )
+
+
+def test_video_generator_raises_value_error_when_shader_missing(monkeypatch):
+    module = _load_module(NODE_PATH)
+    monkeypatch.setattr(module, "load_shader", lambda _name: (_ for _ in ()).throw(FileNotFoundError("glitch")))
+
+    node = module.CoolVideoGenerator()
+    image = torch.ones((1, 2, 2, 3), dtype=torch.float32)
+
+    with pytest.raises(ValueError, match="effect_name 'glitch'"):
+        node.execute(
+            image=image,
+            effect_params=_build_effect_params("glitch"),
             fps=1,
             duration=1.0,
         )
