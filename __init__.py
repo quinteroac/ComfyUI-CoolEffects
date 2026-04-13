@@ -28,6 +28,12 @@ _effect_selector_module = _load_module_from_path(
 )
 CoolEffectSelector = _effect_selector_module.CoolEffectSelector
 
+_glitch_effect_module = _load_module_from_path(
+    "cool_effects_glitch_effect_runtime",
+    PACKAGE_ROOT / "nodes" / "glitch_effect.py",
+)
+CoolGlitchEffect = _glitch_effect_module.CoolGlitchEffect
+
 _video_generator_import_error = None
 try:
     _video_generator_module = _load_module_from_path(
@@ -43,9 +49,11 @@ else:
 
 NODE_CLASS_MAPPINGS = {
     "CoolEffectSelector": CoolEffectSelector,
+    "CoolGlitchEffect": CoolGlitchEffect,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     "CoolEffectSelector": "Cool Effect Selector",
+    "CoolGlitchEffect": "Cool Glitch Effect",
 }
 
 if CoolVideoGenerator is not None:

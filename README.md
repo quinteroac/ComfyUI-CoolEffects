@@ -5,6 +5,7 @@ ComfyUI-CoolEffects is a custom node package for applying GLSL-driven effects to
 ## Included nodes
 
 - `CoolEffectSelector`: outputs the selected effect name (no image input required).
+- `CoolGlitchEffect`: outputs glitch `EFFECT_PARAMS` from wave controls and includes a live preview widget.
 - `CoolVideoGenerator`: renders shader-driven frame batches from an input image.
 
 ## Shader architecture
