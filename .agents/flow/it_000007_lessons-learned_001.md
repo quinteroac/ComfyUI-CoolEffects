@@ -39,3 +39,13 @@
 **Pitfalls Encountered:** None beyond ensuring all pan-family contract assertions remained synchronized when expanding expected shader lists and README coverage counts.
 
 **Useful Context for Future Agents:** The `EXPECTED_SHADERS` tuple in `tests/test_initial_shaders.py` drives file-existence and compile checks; whenever adding a shader, update that tuple and the README contract assertions in the same change.
+
+## US-005 — Pan Diagonal shader renders a diagonal scrolling animation
+
+**Summary:** Added `pan_diagonal.frag` with configurable directional panning, added `pan_diagonal` defaults in `DEFAULT_PARAMS`, and expanded shader/default/readme tests for the new directional uniforms and formula.
+
+**Key Decisions:** Kept the pan-family structure (`origin_uv`, `scroll_offset`, `wrapped_uv`) and implemented diagonal movement exactly as `u_speed * u_time * vec2(u_dir_x, u_dir_y)` so angle control is a pure direction-vector concern.
+
+**Pitfalls Encountered:** Needed to keep README assertions and `u_speed` occurrence count synchronized in `tests/test_initial_shaders.py` when introducing another pan variant.
+
+**Useful Context for Future Agents:** For new pan variants, add both shader-specific uniform assertions and explicit movement-formula assertions in `tests/test_initial_shaders.py` so direction semantics are locked by tests rather than inferred only from compilation.

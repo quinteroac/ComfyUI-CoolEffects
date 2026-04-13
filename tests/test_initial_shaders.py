@@ -8,7 +8,16 @@ PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 LOADER_PATH = PACKAGE_ROOT / "shaders" / "loader.py"
 GLSL_DIR = PACKAGE_ROOT / "shaders" / "glsl"
 README_PATH = PACKAGE_ROOT / "shaders" / "README.md"
-EXPECTED_SHADERS = ("glitch", "vhs", "zoom_pulse", "pan_left", "pan_right", "pan_up", "pan_down")
+EXPECTED_SHADERS = (
+    "glitch",
+    "vhs",
+    "zoom_pulse",
+    "pan_left",
+    "pan_right",
+    "pan_up",
+    "pan_down",
+    "pan_diagonal",
+)
 
 VERTEX_SHADER_SOURCE = """
 #version 330
@@ -173,6 +182,24 @@ def test_pan_down_shader_starts_at_origin_and_scrolls_down_with_wrapped_uv():
     assert "vec2 wrapped_uv = fract(origin_uv + scroll_offset);" in source
 
 
+def test_pan_diagonal_shader_declares_per_effect_uniforms():
+    source = _load_loader_module().load_shader("pan_diagonal")
+
+    assert "uniform float u_speed;" in source
+    assert "uniform float u_origin_x;" in source
+    assert "uniform float u_origin_y;" in source
+    assert "uniform float u_dir_x;" in source
+    assert "uniform float u_dir_y;" in source
+
+
+def test_pan_diagonal_shader_uses_directional_scroll_offset_with_wrapped_uv():
+    source = _load_loader_module().load_shader("pan_diagonal")
+
+    assert "vec2 origin_uv = uv + vec2(u_origin_x, u_origin_y);" in source
+    assert "vec2 scroll_offset = u_speed * u_time * vec2(u_dir_x, u_dir_y);" in source
+    assert "vec2 wrapped_uv = fract(origin_uv + scroll_offset);" in source
+
+
 def test_shaders_compile_in_moderngl():
     moderngl = pytest.importorskip("moderngl")
     loader_module = _load_loader_module()
@@ -223,4 +250,7 @@ def test_shader_readme_documents_uniform_contract():
     assert "### `pan_right.frag`" in content
     assert "### `pan_up.frag`" in content
     assert "### `pan_down.frag`" in content
-    assert content.count("`uniform float u_speed` — default: `0.1`") >= 4
+    assert "### `pan_diagonal.frag`" in content
+    assert "`uniform float u_dir_x` — default: `0.7071`" in content
+    assert "`uniform float u_dir_y` — default: `0.7071`" in content
+    assert content.count("`uniform float u_speed` — default: `0.1`") >= 5

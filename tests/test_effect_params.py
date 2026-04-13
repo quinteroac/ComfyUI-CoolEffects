@@ -87,6 +87,13 @@ def test_default_params_contains_original_defaults_for_all_effects():
         "u_origin_x": 0.0,
         "u_origin_y": 0.0,
     }
+    assert module.DEFAULT_PARAMS["pan_diagonal"] == {
+        "u_speed": 0.1,
+        "u_origin_x": 0.0,
+        "u_origin_y": 0.0,
+        "u_dir_x": 0.7071,
+        "u_dir_y": 0.7071,
+    }
 
 
 def test_merge_params_overrides_defaults_with_incoming_params():

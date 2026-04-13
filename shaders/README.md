@@ -62,3 +62,11 @@ Defaults below mirror `nodes/effect_params.py` (`DEFAULT_PARAMS`) and preserve b
 - `uniform float u_speed` — default: `0.1`
 - `uniform float u_origin_x` — default: `0.0`
 - `uniform float u_origin_y` — default: `0.0`
+
+### `pan_diagonal.frag`
+
+- `uniform float u_speed` — default: `0.1`
+- `uniform float u_origin_x` — default: `0.0`
+- `uniform float u_origin_y` — default: `0.0`
+- `uniform float u_dir_x` — default: `0.7071`
+- `uniform float u_dir_y` — default: `0.7071`
