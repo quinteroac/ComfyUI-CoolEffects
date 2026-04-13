@@ -29,3 +29,13 @@
 **Pitfalls Encountered:** The local runtime did not initially provide a `pytest` executable in `PATH`, so test execution needed to use an installed module form.
 
 **Useful Context for Future Agents:** Keep effect-uniform regression checks in `tests/test_initial_shaders.py`; this file already centralizes shader contract checks and is loaded through `shaders/loader.py`, matching runtime behavior.
+
+## US-004 — ZoomPulse shader per-effect uniforms
+
+**Summary:** Updated `shaders/glsl/zoom_pulse.frag` to expose pulse amplitude and speed as `u_pulse_amp` and `u_pulse_speed` uniforms, and added `zoom_pulse` assertions in `tests/test_initial_shaders.py` for declaration, formula usage, and hardcoded-constant removal.
+
+**Key Decisions:** Preserved the original pulse math structure (`1.0 + amp * sin(time * speed)`) and only replaced numeric constants with uniforms so default runtime values (`0.06`, `3.0`) keep behavior visually equivalent.
+
+**Pitfalls Encountered:** Repository-wide pytest still includes unrelated existing frontend test failures, so story validation used the targeted shader test module.
+
+**Useful Context for Future Agents:** Use `uv run --no-project --with pytest pytest -q tests/test_initial_shaders.py` in this environment; the local Python toolchain lacks direct `pytest`/`pip`, and this command reliably runs shader contract tests.

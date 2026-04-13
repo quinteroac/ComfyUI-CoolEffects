@@ -89,6 +89,26 @@ def test_vhs_shader_has_no_hardcoded_per_effect_constants():
     assert "-0.002 + jitter" not in source
 
 
+def test_zoom_pulse_shader_declares_per_effect_uniforms():
+    source = _load_loader_module().load_shader("zoom_pulse")
+
+    assert "uniform float u_pulse_amp;" in source
+    assert "uniform float u_pulse_speed;" in source
+
+
+def test_zoom_pulse_shader_uses_uniforms_for_default_equivalent_behavior():
+    source = _load_loader_module().load_shader("zoom_pulse")
+
+    assert "u_pulse_amp * sin(u_time * u_pulse_speed)" in source
+
+
+def test_zoom_pulse_shader_has_no_hardcoded_per_effect_constants():
+    source = _load_loader_module().load_shader("zoom_pulse")
+
+    assert "0.06 * sin(" not in source
+    assert "u_time * 3.0" not in source
+
+
 def test_shaders_compile_in_moderngl():
     moderngl = pytest.importorskip("moderngl")
     loader_module = _load_loader_module()
