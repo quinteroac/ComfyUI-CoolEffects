@@ -29,3 +29,13 @@
 **Pitfalls Encountered:** Full-suite pytest still reports pre-existing failures in effect selector and web shader loader tests unrelated to US-003 changes; verification was performed with focused node/widget suites covering glitch, vhs, and the new zoom pulse surfaces.
 
 **Useful Context for Future Agents:** For new effect widgets, the most stable test contract is asserting `preview_state.preview_controller.preview_descriptor.effect_name` and shader loader calls in a fake DOM harness; this avoids coupling tests to broader effect selector internals that currently have unrelated drift.
+
+## US-004 — Real-time preview reflects parameter changes
+
+**Summary:** Added per-effect widget-to-uniform live updates for `CoolGlitchEffect`, `CoolVHSEffect`, and `CoolZoomPulseEffect` by wiring `onWidgetChanged` to preview uniform updates, and extended preview controller capabilities so parameter changes update runtime uniforms without shader reload.
+
+**Key Decisions:** Implemented explicit per-node mapping tables from widget names to shader uniform keys (matching each Python node `execute` contract), added `preview_controller.set_uniform()` in `web/effect_selector.js`, and introduced a targeted `keep_webgl_error_on_shader_load` option so per-effect nodes preserve the WebGL2-unavailable overlay message while leaving shared selector behavior unchanged.
+
+**Pitfalls Encountered:** Preserving the WebGL2 fallback overlay globally caused drift against pre-existing effect selector expectations; this was resolved by scoping fallback overlay persistence to per-effect mounts only.
+
+**Useful Context for Future Agents:** The new per-effect tests validate AC-critical behavior by asserting: `onWidgetChanged` existence, widget→uniform mapping calls, no extra shader-loader invocations during parameter updates, and safe operation with `WebGL2 not available` overlays. This is now the preferred test pattern for future per-effect preview parameter stories.

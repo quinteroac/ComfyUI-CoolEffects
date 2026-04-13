@@ -404,6 +404,7 @@ export async function create_live_glsl_preview({
     effect_name,
     input_image = null,
     preview_state = {},
+    keep_webgl_error_on_shader_load = false,
     now = default_now,
     shader_loader = loadShader,
     request_animation_frame = default_request_animation_frame,
@@ -454,10 +455,14 @@ export async function create_live_glsl_preview({
                 renderer.set_fragment_shader(frag_source);
                 if (input_image) renderer.set_image_texture(input_image);
             }
-            preview_state.preview_error = "";
+            if (renderer || !keep_webgl_error_on_shader_load) {
+                preview_state.preview_error = "";
+            }
         } catch (error) {
             if (request_id !== active_shader_request_id) return;
-            preview_state.preview_error = `Shader error: ${error.message}`;
+            if (renderer || !keep_webgl_error_on_shader_load) {
+                preview_state.preview_error = `Shader error: ${error.message}`;
+            }
         } finally {
             if (request_id === active_shader_request_id) {
                 preview_state.last_shader_load_ms = now() - start_ms;
@@ -490,6 +495,20 @@ export async function create_live_glsl_preview({
         canvas_element,
         overlay_element,
         preview_descriptor,
+        set_uniform(uniform_name, value) {
+            const numeric_value = Number(value);
+            if (
+                typeof uniform_name !== "string" ||
+                uniform_name.length === 0 ||
+                !Number.isFinite(numeric_value)
+            ) {
+                return;
+            }
+            preview_descriptor.uniforms[uniform_name] = numeric_value;
+            if (renderer) {
+                renderer.set_uniform(uniform_name, numeric_value);
+            }
+        },
         set_input_image(next_image) {
             preview_descriptor.uniforms.u_image = next_image ?? null;
             if (renderer && next_image) renderer.set_image_texture(next_image);

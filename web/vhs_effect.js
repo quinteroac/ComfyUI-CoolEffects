@@ -5,6 +5,28 @@ import {
 } from "./effect_selector.js";
 
 export const EXTENSION_NAME = "Comfy.CoolEffects.VHSEffect";
+const VHS_WIDGET_UNIFORM_MAP = Object.freeze({
+    scanline_intensity: "u_scanline_intensity",
+    jitter_amount: "u_jitter_amount",
+    chroma_shift: "u_chroma_shift",
+});
+
+function apply_uniform_from_widget(node, widget_name, widget_value) {
+    const uniform_name = VHS_WIDGET_UNIFORM_MAP[widget_name];
+    if (!uniform_name) {
+        return;
+    }
+    const preview_controller =
+        node?.__cool_vhs_widget_state?.preview_state?.preview_controller;
+    if (!preview_controller || typeof preview_controller.set_uniform !== "function") {
+        return;
+    }
+    const numeric_value = Number(widget_value);
+    if (!Number.isFinite(numeric_value)) {
+        return;
+    }
+    preview_controller.set_uniform(uniform_name, numeric_value);
+}
 
 export async function mount_vhs_effect_widget_for_node({
     node,
@@ -57,6 +79,7 @@ export async function mount_vhs_effect_widget_for_node({
         effect_name: "vhs",
         input_image: placeholder_texture,
         preview_state,
+        keep_webgl_error_on_shader_load: true,
         shader_loader,
         request_animation_frame,
         cancel_animation_frame,
@@ -91,6 +114,7 @@ export function register_comfy_extension(
             }
             const previous_on_node_created = nodeType.prototype.onNodeCreated;
             const previous_on_removed = nodeType.prototype.onRemoved;
+            const previous_on_widget_changed = nodeType.prototype.onWidgetChanged;
 
             nodeType.prototype.onNodeCreated = async function onNodeCreated() {
                 if (typeof previous_on_node_created === "function") {
@@ -118,6 +142,14 @@ export function register_comfy_extension(
                 if (typeof previous_on_removed === "function") {
                     previous_on_removed.apply(this, arguments);
                 }
+            };
+
+            nodeType.prototype.onWidgetChanged = function onWidgetChanged() {
+                if (typeof previous_on_widget_changed === "function") {
+                    previous_on_widget_changed.apply(this, arguments);
+                }
+                const [widget_name, widget_value] = arguments;
+                apply_uniform_from_widget(this, widget_name, widget_value);
             };
         },
     });
