@@ -87,3 +87,98 @@ def test_execute_calls_merge_params_with_effect_params_bundle_fields():
             break
 
     assert expected, "execute must call merge_params(effect_params['effect_name'], effect_params['params'])"
+
+
+def test_execute_sets_merged_uniforms_per_frame_with_float_cast_and_missing_skip():
+    class_node = _get_cool_video_generator_class()
+    execute_method = _get_method(class_node, "execute")
+
+    frame_loops = [
+        node for node in ast.walk(execute_method)
+        if isinstance(node, ast.For)
+        and isinstance(node.iter, ast.Call)
+        and isinstance(node.iter.func, ast.Name)
+        and node.iter.func.id == "range"
+    ]
+    assert frame_loops, "execute must iterate over rendered frames"
+
+    found_inner_uniform_loop = False
+    found_float_assignment = False
+    found_missing_uniform_skip = False
+
+    for frame_loop in frame_loops:
+        inner_loops = [node for node in frame_loop.body if isinstance(node, ast.For)]
+        for inner_loop in inner_loops:
+            if not (
+                isinstance(inner_loop.iter, ast.Call)
+                and isinstance(inner_loop.iter.func, ast.Attribute)
+                and isinstance(inner_loop.iter.func.value, ast.Name)
+                and inner_loop.iter.func.value.id == "final_uniform_params"
+                and inner_loop.iter.func.attr == "items"
+            ):
+                continue
+            found_inner_uniform_loop = True
+
+            for node in ast.walk(inner_loop):
+                if isinstance(node, ast.Assign):
+                    if len(node.targets) != 1:
+                        continue
+                    target = node.targets[0]
+                    if not (
+                        isinstance(target, ast.Attribute)
+                        and target.attr == "value"
+                        and isinstance(target.value, ast.Subscript)
+                        and isinstance(target.value.value, ast.Name)
+                        and target.value.value.id == "program"
+                    ):
+                        continue
+                    if (
+                        isinstance(node.value, ast.Call)
+                        and isinstance(node.value.func, ast.Name)
+                        and node.value.func.id == "float"
+                        and len(node.value.args) == 1
+                        and isinstance(node.value.args[0], ast.Name)
+                        and node.value.args[0].id == "uniform_value"
+                    ):
+                        found_float_assignment = True
+
+                if isinstance(node, ast.ExceptHandler):
+                    if isinstance(node.type, ast.Name) and node.type.id == "KeyError":
+                        found_missing_uniform_skip = True
+
+    assert found_inner_uniform_loop, "execute must loop through final_uniform_params.items() inside frame loop"
+    assert found_float_assignment, "execute must assign float(uniform_value) to program[uniform_name].value"
+    assert found_missing_uniform_skip, "execute must skip missing uniforms via KeyError handling"
+
+
+def test_execute_keeps_base_uniform_assignments():
+    class_node = _get_cool_video_generator_class()
+    execute_method = _get_method(class_node, "execute")
+
+    has_u_image_assignment = False
+    has_u_resolution_assignment = False
+    has_u_time_assignment = False
+
+    for node in ast.walk(execute_method):
+        if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+            continue
+        target = node.targets[0]
+        if not (
+            isinstance(target, ast.Attribute)
+            and target.attr == "value"
+            and isinstance(target.value, ast.Subscript)
+            and isinstance(target.value.value, ast.Name)
+            and target.value.value.id == "program"
+        ):
+            continue
+        key = _subscript_string_key(target.value)
+        if key == "u_image":
+            has_u_image_assignment = True
+        elif key == "u_resolution":
+            has_u_resolution_assignment = True
+        elif key == "u_time":
+            has_u_time_assignment = True
+
+    assert has_u_image_assignment
+    assert has_u_resolution_assignment
+    assert has_u_time_assignment

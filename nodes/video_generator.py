@@ -138,10 +138,13 @@ class CoolVideoGenerator:
             input_texture.use(location=0)
             program["u_image"].value = 0
             program["u_resolution"].value = (width, height)
-            for uniform_name, uniform_value in final_uniform_params.items():
-                program[uniform_name].value = uniform_value
 
             for frame_index in range(frame_count):
+                for uniform_name, uniform_value in final_uniform_params.items():
+                    try:
+                        program[uniform_name].value = float(uniform_value)
+                    except KeyError:
+                        continue
                 program["u_time"].value = frame_index / fps
                 fbo.use()
                 vao.render(moderngl.TRIANGLES)

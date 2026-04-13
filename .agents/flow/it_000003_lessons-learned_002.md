@@ -19,3 +19,13 @@
 **Pitfalls Encountered:** Existing fake shader program tests only defined base uniforms (`u_image`, `u_time`, `u_resolution`); dynamic uniform lookups had to be supported in the test fake to validate merged uniform assignment.
 
 **Useful Context for Future Agents:** Unknown effect handling now occurs before shader file loading and raises `ValueError` from the merge step, so shader-missing tests should use a known effect name to isolate `load_shader` error behavior.
+
+## US-003 — Per-uniform ModernGL dispatch
+
+**Summary:** Updated `CoolVideoGenerator.execute` so merged effect uniforms are dispatched inside the frame render loop as `float` values, and missing uniforms are skipped by catching `KeyError`.
+
+**Key Decisions:** Kept base uniforms (`u_image`, `u_resolution`, `u_time`) on their existing explicit paths, while adding frame-local iteration over `final_uniform_params.items()` to satisfy per-frame uniform updates without changing shader loading or rendering structure.
+
+**Pitfalls Encountered:** Runtime `torch`-dependent tests may be skipped in minimal environments, so AST contract tests were expanded to enforce loop placement, float casting, and missing-uniform skip semantics independent of runtime dependencies.
+
+**Useful Context for Future Agents:** The fake ModernGL test doubles now support strict uniform availability (`strict_missing=True`) and per-assignment history (`uniform.values`), which is useful for validating uniform update cadence and skip behavior without a real GL context.

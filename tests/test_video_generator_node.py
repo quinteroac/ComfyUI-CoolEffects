@@ -32,6 +32,7 @@ def _build_effect_params(effect_name: str, params: dict | None = None) -> dict:
 class _FakeUniform:
     def __init__(self):
         self._value = None
+        self.values = []
 
     @property
     def value(self):
@@ -40,19 +41,27 @@ class _FakeUniform:
     @value.setter
     def value(self, new_value):
         self._value = new_value
+        self.values.append(new_value)
 
 
 class _FakeProgram:
-    def __init__(self):
+    def __init__(self, available_uniforms: set[str] | None = None, strict_missing: bool = False):
         self.uniforms = {
             "u_image": _FakeUniform(),
             "u_time": _FakeUniform(),
             "u_resolution": _FakeUniform(),
         }
+        if available_uniforms:
+            for uniform_name in available_uniforms:
+                if uniform_name not in self.uniforms:
+                    self.uniforms[uniform_name] = _FakeUniform()
+        self.strict_missing = strict_missing
         self.released = False
 
     def __getitem__(self, key):
         if key not in self.uniforms:
+            if self.strict_missing:
+                raise KeyError(key)
             self.uniforms[key] = _FakeUniform()
         return self.uniforms[key]
 
@@ -120,18 +129,23 @@ class _FakeVertexArray:
 
 
 class _FakeContext:
-    def __init__(self):
+    def __init__(self, available_uniforms: set[str] | None = None, strict_missing: bool = False):
         self.released = False
         self.program_object = None
         self.framebuffer_object = None
         self.buffer_object = None
         self.vertex_array_object = None
         self.texture_objects = []
+        self.available_uniforms = available_uniforms
+        self.strict_missing = strict_missing
 
     def program(self, *, vertex_shader, fragment_shader):
         self.vertex_shader = vertex_shader
         self.fragment_shader = fragment_shader
-        self.program_object = _FakeProgram()
+        self.program_object = _FakeProgram(
+            available_uniforms=self.available_uniforms,
+            strict_missing=self.strict_missing,
+        )
         return self.program_object
 
     def texture(self, size, components, data=None):
@@ -159,13 +173,18 @@ class _FakeContext:
 class _FakeModerngl:
     TRIANGLES = 4
 
-    def __init__(self):
+    def __init__(self, available_uniforms: set[str] | None = None, strict_missing: bool = False):
         self.create_calls = 0
         self.latest_context = None
+        self.available_uniforms = available_uniforms
+        self.strict_missing = strict_missing
 
     def create_standalone_context(self, **_kwargs):
         self.create_calls += 1
-        self.latest_context = _FakeContext()
+        self.latest_context = _FakeContext(
+            available_uniforms=self.available_uniforms,
+            strict_missing=self.strict_missing,
+        )
         return self.latest_context
 
 
@@ -361,6 +380,71 @@ def test_video_generator_binds_u_image_texture_and_resolution(monkeypatch):
     assert input_texture.used_locations == [0]
     assert program["u_image"].value == 0
     assert program["u_resolution"].value == (3, 2)
+
+
+def test_video_generator_sets_effect_uniforms_each_frame_as_floats(monkeypatch):
+    module = _load_module(NODE_PATH)
+    fake_moderngl = _FakeModerngl(
+        available_uniforms={"u_wave_freq", "u_wave_amp", "u_speed"},
+        strict_missing=True,
+    )
+    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
+    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
+
+    node = module.CoolVideoGenerator()
+    image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
+    effect_params = _build_effect_params(
+        "glitch",
+        {"u_wave_freq": 9, "u_wave_amp": 1, "u_speed": 3},
+    )
+    node.execute(image=image, effect_params=effect_params, fps=3, duration=1.0)
+
+    program = fake_moderngl.latest_context.program_object
+    assert program["u_wave_freq"].values == [9.0, 9.0, 9.0]
+    assert program["u_wave_amp"].values == [1.0, 1.0, 1.0]
+    assert program["u_speed"].values == [3.0, 3.0, 3.0]
+
+
+def test_video_generator_skips_missing_effect_uniforms_without_error(monkeypatch):
+    module = _load_module(NODE_PATH)
+    fake_moderngl = _FakeModerngl(
+        available_uniforms={"u_wave_freq"},
+        strict_missing=True,
+    )
+    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
+    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
+
+    node = module.CoolVideoGenerator()
+    image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
+    effect_params = _build_effect_params(
+        "glitch",
+        {"u_not_real": 5},
+    )
+    node.execute(image=image, effect_params=effect_params, fps=2, duration=1.0)
+
+    program = fake_moderngl.latest_context.program_object
+    assert program["u_wave_freq"].values == [120.0, 120.0]
+    assert "u_not_real" not in program.uniforms
+
+
+def test_video_generator_sets_base_uniforms_independently_from_effect_params(monkeypatch):
+    module = _load_module(NODE_PATH)
+    fake_moderngl = _FakeModerngl()
+    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
+    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
+
+    node = module.CoolVideoGenerator()
+    image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
+    effect_params = _build_effect_params(
+        "glitch",
+        {"u_wave_freq": 15},
+    )
+    node.execute(image=image, effect_params=effect_params, fps=3, duration=1.0)
+
+    program = fake_moderngl.latest_context.program_object
+    assert program["u_image"].values == [0]
+    assert program["u_resolution"].values == [(3, 2)]
+    assert program["u_time"].values == [0.0, 1.0 / 3.0, 2.0 / 3.0]
 
 
 def test_video_generator_uses_default_uniforms_when_effect_params_are_empty(monkeypatch):
