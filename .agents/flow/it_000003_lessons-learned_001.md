@@ -19,3 +19,13 @@
 **Pitfalls Encountered:** Full-suite baseline currently includes unrelated pre-existing JS/widget test failures, so verification for this story was performed with targeted shader tests.
 
 **Useful Context for Future Agents:** `tests/test_initial_shaders.py` is the current place for shader-contract checks; add effect-specific uniform assertions there to keep coverage centralized with loader-based source reads.
+
+## US-003 — VHS shader per-effect uniforms
+
+**Summary:** Updated `shaders/glsl/vhs.frag` to replace scanline intensity, jitter amount, and chroma shift hardcoded values with `u_scanline_intensity`, `u_jitter_amount`, and `u_chroma_shift` uniforms. Added focused VHS assertions in `tests/test_initial_shaders.py`.
+
+**Key Decisions:** Preserved the existing VHS math and only parameterized the three effect-tuning values so rendering remains equivalent when defaults are supplied (`0.04`, `0.0018`, `0.002`).
+
+**Pitfalls Encountered:** The local runtime did not initially provide a `pytest` executable in `PATH`, so test execution needed to use an installed module form.
+
+**Useful Context for Future Agents:** Keep effect-uniform regression checks in `tests/test_initial_shaders.py`; this file already centralizes shader contract checks and is loaded through `shaders/loader.py`, matching runtime behavior.

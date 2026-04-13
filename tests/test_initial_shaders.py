@@ -63,6 +63,32 @@ def test_glitch_shader_has_no_hardcoded_wave_constants():
     assert "* 0.0025" not in source
 
 
+def test_vhs_shader_declares_per_effect_uniforms():
+    source = _load_loader_module().load_shader("vhs")
+
+    assert "uniform float u_scanline_intensity;" in source
+    assert "uniform float u_jitter_amount;" in source
+    assert "uniform float u_chroma_shift;" in source
+
+
+def test_vhs_shader_uses_uniforms_for_default_equivalent_behavior():
+    source = _load_loader_module().load_shader("vhs")
+
+    assert "sin(uv.y * u_resolution.y * 0.75) * u_scanline_intensity" in source
+    assert "sin((uv.y + u_time * 2.0) * 90.0) * u_jitter_amount" in source
+    assert "vec2(u_chroma_shift + jitter, 0.0)" in source
+    assert "vec2(-u_chroma_shift + jitter, 0.0)" in source
+
+
+def test_vhs_shader_has_no_hardcoded_per_effect_constants():
+    source = _load_loader_module().load_shader("vhs")
+
+    assert "* 0.04" not in source
+    assert "* 0.0018" not in source
+    assert "0.002 + jitter" not in source
+    assert "-0.002 + jitter" not in source
+
+
 def test_shaders_compile_in_moderngl():
     moderngl = pytest.importorskip("moderngl")
     loader_module = _load_loader_module()
