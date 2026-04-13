@@ -39,3 +39,13 @@
 **Pitfalls Encountered:** `pytest` is still unavailable in this environment (`pytest: command not found`), preventing local test execution despite implementing the test coverage.
 
 **Useful Context for Future Agents:** For additional directional node stories, copy the most recent pan-node test template and only adjust effect identifier/display strings to keep AC coverage complete and consistent.
+
+## US-005 — CoolPanDiagonalEffect node produces valid EFFECT_PARAMS
+
+**Summary:** Added `CoolPanDiagonalEffect` in `nodes/pan_diagonal_effect.py` with speed/origin controls plus diagonal direction controls (`dir_x`, `dir_y`), implemented `execute()` to emit `pan_diagonal` effect params, registered it in `__init__.py`, and added focused tests in `tests/test_pan_diagonal_effect_node.py`.
+
+**Key Decisions:** Followed the same runtime module-loading and node metadata contract used by other pan effect nodes to keep registration and behavior consistent; extended the established input schema pattern with `dir_x`/`dir_y` while preserving the existing `EFFECT_PARAMS` output shape.
+
+**Pitfalls Encountered:** `pytest` remains unavailable in this environment (`pytest: command not found`), so test execution could not be run locally in-session.
+
+**Useful Context for Future Agents:** `effect_params.py` already includes `pan_diagonal` defaults, so new diagonal-node work only needs node wiring and tests; keeping tests in the standalone module-load pattern avoids package import side effects.
