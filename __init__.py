@@ -46,6 +46,12 @@ _zoom_pulse_effect_module = _load_module_from_path(
 )
 CoolZoomPulseEffect = _zoom_pulse_effect_module.CoolZoomPulseEffect
 
+_pan_left_effect_module = _load_module_from_path(
+    "cool_effects_pan_left_effect_runtime",
+    PACKAGE_ROOT / "nodes" / "pan_left_effect.py",
+)
+CoolPanLeftEffect = _pan_left_effect_module.CoolPanLeftEffect
+
 _video_generator_import_error = None
 try:
     _video_generator_module = _load_module_from_path(
@@ -64,12 +70,14 @@ NODE_CLASS_MAPPINGS = {
     "CoolGlitchEffect": CoolGlitchEffect,
     "CoolVHSEffect": CoolVHSEffect,
     "CoolZoomPulseEffect": CoolZoomPulseEffect,
+    "CoolPanLeftEffect": CoolPanLeftEffect,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     "CoolEffectSelector": "Cool Effect Selector",
     "CoolGlitchEffect": "Cool Glitch Effect",
     "CoolVHSEffect": "Cool VHS Effect",
     "CoolZoomPulseEffect": "Cool Zoom Pulse Effect",
+    "CoolPanLeftEffect": "Cool Pan Left Effect",
 }
 
 if CoolVideoGenerator is not None:
