@@ -19,3 +19,13 @@
 **Pitfalls Encountered:** Test execution initially skipped runtime coverage until `torch` was installed in the virtual environment; after installing `torch` and `numpy`, the generator tests validated the new behavior.
 
 **Useful Context for Future Agents:** The fake texture test double now tracks upload order through `uploads`, which makes it easy to assert exact batch-frame usage and detect unnecessary GPU uploads for short outputs.
+
+## US-003 — Batch texture upload is memory-efficient
+
+**Summary:** Updated `CoolVideoGenerator` to keep a single ModernGL input texture during rendering by attaching a renderbuffer (not a second texture) to the framebuffer, and added regression tests for single-texture behavior across 100+ frames.
+
+**Key Decisions:** Replaced the output color attachment from `ctx.texture(...)` to `ctx.renderbuffer(...)` so only one texture object exists in the render loop while preserving the existing `fbo.read(...)` pipeline and output tensor contract.
+
+**Pitfalls Encountered:** The test double context originally only implemented `texture(...)`; adding renderbuffer support required extending the fake context and release assertions to keep resource lifecycle tests accurate.
+
+**Useful Context for Future Agents:** `tests/test_video_generator_node.py` now explicitly asserts `len(context.texture_objects) == 1` for batch rendering and long (120-frame) runs, so future regressions that reintroduce per-frame texture allocation should fail fast.

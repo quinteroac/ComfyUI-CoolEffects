@@ -92,8 +92,8 @@ class _FakeTexture:
 
 
 class _FakeFramebuffer:
-    def __init__(self, texture):
-        self.texture = texture
+    def __init__(self, color_attachment):
+        self.color_attachment = color_attachment
         self.released = False
         self.use_calls = 0
         self.read_components = []
@@ -104,7 +104,7 @@ class _FakeFramebuffer:
 
     def read(self, components):
         self.read_components.append(components)
-        width, height = self.texture.size
+        width, height = self.color_attachment.size
         frame_value = self.read_count % 256
         self.read_count += 1
         return bytes([frame_value]) * (width * height * components)
@@ -116,6 +116,16 @@ class _FakeFramebuffer:
 class _FakeBuffer:
     def __init__(self, data):
         self.data = data
+        self.released = False
+
+    def release(self):
+        self.released = True
+
+
+class _FakeRenderbuffer:
+    def __init__(self, size, components):
+        self.size = size
+        self.components = components
         self.released = False
 
     def release(self):
@@ -143,6 +153,7 @@ class _FakeContext:
         self.buffer_object = None
         self.vertex_array_object = None
         self.texture_objects = []
+        self.renderbuffer_objects = []
         self.available_uniforms = available_uniforms
         self.strict_missing = strict_missing
 
@@ -159,6 +170,11 @@ class _FakeContext:
         texture = _FakeTexture(size=size, components=components, data=data)
         self.texture_objects.append(texture)
         return texture
+
+    def renderbuffer(self, size, components):
+        renderbuffer = _FakeRenderbuffer(size=size, components=components)
+        self.renderbuffer_objects.append(renderbuffer)
+        return renderbuffer
 
     def framebuffer(self, *, color_attachments):
         self.framebuffer_object = _FakeFramebuffer(color_attachments[0])
@@ -602,6 +618,38 @@ def test_video_generator_does_not_upload_unused_batch_frames_when_output_is_shor
     ]
 
 
+def test_video_generator_reuses_single_input_texture_in_render_loop(monkeypatch):
+    module = _load_module(NODE_PATH)
+    fake_moderngl = _FakeModerngl()
+    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
+    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
+
+    node = module.CoolVideoGenerator()
+    image_batch = torch.rand((4, 2, 2, 3), dtype=torch.float32)
+    output, = node.execute(image=image_batch, effect_params=_build_effect_params("glitch"), fps=5, duration=2.0)
+
+    context = fake_moderngl.latest_context
+    assert output.shape[0] == 10
+    assert len(context.texture_objects) == 1
+    assert len(context.renderbuffer_objects) == 1
+
+
+def test_video_generator_processes_120_frames_without_allocating_texture_batch(monkeypatch):
+    module = _load_module(NODE_PATH)
+    fake_moderngl = _FakeModerngl()
+    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
+    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
+
+    node = module.CoolVideoGenerator()
+    image_batch = torch.rand((3, 2, 2, 3), dtype=torch.float32)
+    output, = node.execute(image=image_batch, effect_params=_build_effect_params("glitch"), fps=30, duration=4.0)
+
+    context = fake_moderngl.latest_context
+    assert output.shape[0] == 120
+    assert len(context.texture_objects) == 1
+    assert context.framebuffer_object.use_calls == 120
+
+
 def test_video_generator_uses_default_uniforms_when_effect_params_are_empty(monkeypatch):
     module = _load_module(NODE_PATH)
     fake_moderngl = _FakeModerngl()
@@ -669,6 +717,7 @@ def test_video_generator_releases_gl_resources(monkeypatch):
     assert context.buffer_object.released is True
     assert context.vertex_array_object.released is True
     assert all(texture.released for texture in context.texture_objects)
+    assert all(renderbuffer.released for renderbuffer in context.renderbuffer_objects)
     assert context.released is True
 
 

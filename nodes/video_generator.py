@@ -118,7 +118,7 @@ class CoolVideoGenerator:
         ctx = None
         program = None
         input_texture = None
-        output_texture = None
+        output_renderbuffer = None
         fbo = None
         vbo = None
         vao = None
@@ -131,8 +131,8 @@ class CoolVideoGenerator:
                 fragment_shader=fragment_shader_source,
             )
             input_texture = ctx.texture((width, height), 3, source_frames[0].tobytes())
-            output_texture = ctx.texture((width, height), 3)
-            fbo = ctx.framebuffer(color_attachments=[output_texture])
+            output_renderbuffer = ctx.renderbuffer((width, height), components=3)
+            fbo = ctx.framebuffer(color_attachments=[output_renderbuffer])
             vbo = ctx.buffer(_FULLSCREEN_QUAD_VERTICES.tobytes())
             vao = ctx.simple_vertex_array(program, vbo, "in_pos")
 
@@ -165,7 +165,7 @@ class CoolVideoGenerator:
                 output = torch.empty((0, height, width, 3), dtype=torch.float32)
             return (output,)
         finally:
-            for resource in (vao, vbo, fbo, output_texture, input_texture, program):
+            for resource in (vao, vbo, fbo, output_renderbuffer, input_texture, program):
                 if resource is not None:
                     resource.release()
             if ctx is not None:
