@@ -58,6 +58,12 @@ _pan_right_effect_module = _load_module_from_path(
 )
 CoolPanRightEffect = _pan_right_effect_module.CoolPanRightEffect
 
+_pan_up_effect_module = _load_module_from_path(
+    "cool_effects_pan_up_effect_runtime",
+    PACKAGE_ROOT / "nodes" / "pan_up_effect.py",
+)
+CoolPanUpEffect = _pan_up_effect_module.CoolPanUpEffect
+
 _video_generator_import_error = None
 try:
     _video_generator_module = _load_module_from_path(
@@ -78,6 +84,7 @@ NODE_CLASS_MAPPINGS = {
     "CoolZoomPulseEffect": CoolZoomPulseEffect,
     "CoolPanLeftEffect": CoolPanLeftEffect,
     "CoolPanRightEffect": CoolPanRightEffect,
+    "CoolPanUpEffect": CoolPanUpEffect,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     "CoolEffectSelector": "Cool Effect Selector",
@@ -86,6 +93,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CoolZoomPulseEffect": "Cool Zoom Pulse Effect",
     "CoolPanLeftEffect": "Cool Pan Left Effect",
     "CoolPanRightEffect": "Cool Pan Right Effect",
+    "CoolPanUpEffect": "Cool Pan Up Effect",
 }
 
 if CoolVideoGenerator is not None:
