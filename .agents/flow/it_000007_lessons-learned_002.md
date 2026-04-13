@@ -49,3 +49,13 @@
 **Pitfalls Encountered:** `pytest` remains unavailable in this environment (`pytest: command not found`), so test execution could not be run locally in-session.
 
 **Useful Context for Future Agents:** `effect_params.py` already includes `pan_diagonal` defaults, so new diagonal-node work only needs node wiring and tests; keeping tests in the standalone module-load pattern avoids package import side effects.
+
+## US-006 — Integration tests verify rendered output shape and dtype for all five pan nodes
+
+**Summary:** Added `tests/test_pan_effects.py` with five pan-direction integration tests that execute the real `CoolVideoGenerator` render path for `pan_left`, `pan_right`, `pan_up`, `pan_down`, and `pan_diagonal`.
+
+**Key Decisions:** Used `pytest.importorskip("moderngl")` at module import time so the entire integration suite is skipped when ModernGL is unavailable; reused runtime module loading and `build_effect_params` to keep EFFECT_PARAMS payloads aligned with node contracts.
+
+**Pitfalls Encountered:** The session environment still does not provide `pytest`, so runtime execution of the new tests could not be performed locally.
+
+**Useful Context for Future Agents:** For true rendering integration tests in this repo, invoking `CoolVideoGenerator.execute` without monkeypatching shader loaders is enough to exercise shader discovery, shader compilation, uniform assignment, and framebuffer readback end-to-end.
