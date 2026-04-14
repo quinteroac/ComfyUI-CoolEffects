@@ -67,6 +67,14 @@ def test_default_params_contains_original_defaults_for_all_effects():
         "u_pulse_amp": 0.06,
         "u_pulse_speed": 3.0,
     }
+    assert module.DEFAULT_PARAMS["water_drops"] == {
+        "u_drop_density": 60,
+        "u_drop_size": 0.08,
+        "u_fall_speed": 1.0,
+        "u_refraction_strength": 0.3,
+        "u_gravity": 1.0,
+        "u_wind": 0.0,
+    }
     assert module.DEFAULT_PARAMS["pan_left"] == {
         "u_speed": 0.1,
         "u_origin_x": 0.0,

@@ -46,6 +46,12 @@ _zoom_pulse_effect_module = _load_module_from_path(
 )
 CoolZoomPulseEffect = _zoom_pulse_effect_module.CoolZoomPulseEffect
 
+_water_drops_effect_module = _load_module_from_path(
+    "cool_effects_water_drops_effect_runtime",
+    PACKAGE_ROOT / "nodes" / "water_drops_effect.py",
+)
+CoolWaterDropsEffect = _water_drops_effect_module.CoolWaterDropsEffect
+
 _pan_left_effect_module = _load_module_from_path(
     "cool_effects_pan_left_effect_runtime",
     PACKAGE_ROOT / "nodes" / "pan_left_effect.py",
@@ -100,6 +106,7 @@ NODE_CLASS_MAPPINGS = {
     "CoolGlitchEffect": CoolGlitchEffect,
     "CoolVHSEffect": CoolVHSEffect,
     "CoolZoomPulseEffect": CoolZoomPulseEffect,
+    "CoolWaterDropsEffect": CoolWaterDropsEffect,
     "CoolPanLeftEffect": CoolPanLeftEffect,
     "CoolPanRightEffect": CoolPanRightEffect,
     "CoolPanUpEffect": CoolPanUpEffect,
@@ -112,6 +119,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CoolGlitchEffect": "Cool Glitch Effect",
     "CoolVHSEffect": "Cool VHS Effect",
     "CoolZoomPulseEffect": "Cool Zoom Pulse Effect",
+    "CoolWaterDropsEffect": "Cool Water Drops Effect",
     "CoolPanLeftEffect": "Cool Pan Left Effect",
     "CoolPanRightEffect": "Cool Pan Right Effect",
     "CoolPanUpEffect": "Cool Pan Up Effect",

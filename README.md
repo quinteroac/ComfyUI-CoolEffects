@@ -8,6 +8,7 @@ ComfyUI-CoolEffects is a custom node package for applying GLSL-driven effects to
 - `CoolGlitchEffect`: outputs glitch `EFFECT_PARAMS` from wave controls and includes a live preview widget.
 - `CoolVHSEffect`: outputs VHS `EFFECT_PARAMS` from scanline/chroma controls and includes a live preview widget.
 - `CoolZoomPulseEffect`: outputs zoom pulse `EFFECT_PARAMS` from pulse controls and includes a live preview widget.
+- `CoolWaterDropsEffect`: outputs water-drops `EFFECT_PARAMS` from drop density/size/fall/refraction/gravity/wind controls.
 - `CoolVideoGenerator`: renders shader-driven frame batches from an input image.
 - `CoolVideoPlayer`: accepts a `VIDEO` input and previews decoded frames in an embedded canvas widget.
 
