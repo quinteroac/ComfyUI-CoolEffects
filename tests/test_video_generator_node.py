@@ -225,6 +225,7 @@ class _FakeModerngl:
     def __init__(self, available_uniforms: set[str] | None = None, strict_missing: bool = False):
         self.create_calls = 0
         self.latest_context = None
+        self.contexts = []
         self.available_uniforms = available_uniforms
         self.strict_missing = strict_missing
 
@@ -234,6 +235,7 @@ class _FakeModerngl:
             available_uniforms=self.available_uniforms,
             strict_missing=self.strict_missing,
         )
+        self.contexts.append(self.latest_context)
         return self.latest_context
 
 
@@ -514,6 +516,76 @@ def test_video_generator_chains_two_effects_sequentially(monkeypatch):
     # Two effects × 2 fps × 1 s = 2 GL contexts created
     assert fake_moderngl.create_calls == 2
     assert result["result"][0].images.shape == (2, 2, 2, 3)
+
+
+def test_video_generator_accepts_water_drops_effect_name_without_exception(monkeypatch):
+    module = _load_module(NODE_PATH)
+    _mock_comfy_api(monkeypatch)
+    fake_moderngl = _FakeModerngl()
+    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
+
+    node = module.CoolVideoGenerator()
+    image = torch.ones((1, 2, 2, 3), dtype=torch.float32)
+    ep = _build_effect_params("water_drops")
+
+    result = node.execute(image=image, fps=2, duration=1.0, effect_count=1, effect_params_1=ep)
+
+    assert result["result"][0].images.shape == (2, 2, 2, 3)
+    water_program = fake_moderngl.contexts[0].program_object
+    assert water_program["u_drop_density"].values == [60.0, 60.0]
+
+
+@pytest.mark.parametrize("water_slot", [1, 3, 8])
+def test_video_generator_accepts_water_drops_in_any_effect_params_slot(monkeypatch, water_slot):
+    module = _load_module(NODE_PATH)
+    _mock_comfy_api(monkeypatch)
+    fake_moderngl = _FakeModerngl()
+    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
+
+    node = module.CoolVideoGenerator()
+    image = torch.ones((1, 2, 2, 3), dtype=torch.float32)
+    kwargs = {}
+    for index in range(1, water_slot + 1):
+        if index == water_slot:
+            kwargs[f"effect_params_{index}"] = _build_effect_params("water_drops")
+        else:
+            kwargs[f"effect_params_{index}"] = _build_effect_params("vhs")
+
+    result = node.execute(
+        image=image,
+        fps=2,
+        duration=1.0,
+        effect_count=water_slot,
+        **kwargs,
+    )
+
+    assert result["result"][0].images.shape == (2, 2, 2, 3)
+    assert fake_moderngl.create_calls == water_slot
+    water_program = fake_moderngl.contexts[water_slot - 1].program_object
+    assert water_program["u_drop_density"].values == [60.0, 60.0]
+
+
+def test_video_generator_applies_water_drops_after_vhs_on_processed_frames(monkeypatch):
+    module = _load_module(NODE_PATH)
+    _mock_comfy_api(monkeypatch)
+    fake_moderngl = _FakeModerngl()
+    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
+
+    node = module.CoolVideoGenerator()
+    image = torch.ones((1, 2, 2, 3), dtype=torch.float32)
+
+    node.execute(
+        image=image,
+        fps=2,
+        duration=1.0,
+        effect_count=2,
+        effect_params_1=_build_effect_params("vhs"),
+        effect_params_2=_build_effect_params("water_drops"),
+    )
+
+    assert fake_moderngl.create_calls == 2
+    second_pass_input = fake_moderngl.contexts[1].texture_objects[0].uploads[0]
+    assert second_pass_input == bytes([0]) * len(second_pass_input)
 
 
 def test_video_generator_ignores_extra_effect_params_beyond_count(monkeypatch):

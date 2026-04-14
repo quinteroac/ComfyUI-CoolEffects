@@ -19,3 +19,13 @@
 **Pitfalls Encountered:** The injected acceptance-criteria strings were truncated again, so the full AC text had to be confirmed from `.agents/flow/it_000010_product-requirement-document_001.md` before finalizing test assertions.
 
 **Useful Context for Future Agents:** The story-level tests are in `tests/test_water_drops_effect_widget.py` and directly cover canvas mount, `u_time` animation via rAF, primary parameter uniform sync, and shader lookup by `water_drops`; full-repo pytest still has unrelated pre-existing failures outside this story scope.
+
+## US-003 — Integration with VideoGenerator
+
+**Summary:** Added `CoolVideoGenerator` integration tests for `water_drops` to confirm successful execution, rendering across frames, compatibility with dynamic `effect_params_N` slot positions, and correct post-processing order when chained after VHS.
+
+**Key Decisions:** Reused the existing fake ModernGL harness in `tests/test_video_generator_node.py` and extended it to retain all created contexts so tests can inspect the specific render pass where `water_drops` is applied.
+
+**Pitfalls Encountered:** Acceptance criteria in injected context were truncated, so the complete AC wording was verified from `.agents/flow/it_000010_product-requirement-document_001.md` before mapping assertions.
+
+**Useful Context for Future Agents:** No production code changes were required because `water_drops` was already wired through `DEFAULT_PARAMS`, shader loading, and sequential pass logic; story completion is primarily validated by runtime integration tests in `tests/test_video_generator_node.py`.
