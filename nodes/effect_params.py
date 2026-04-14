@@ -25,6 +25,13 @@ DEFAULT_PARAMS: dict[str, dict] = {
         "u_gravity": 1.0,
         "u_wind": 0.0,
     },
+    "frosted_glass": {
+        "u_frost_intensity": 0.5,
+        "u_blur_radius": 0.015,
+        "u_uniformity": 0.6,
+        "u_tint_temperature": 0.0,
+        "u_condensation_rate": 0.0,
+    },
     "pan_left": {
         "u_speed": 0.1,
         "u_origin_x": 0.0,

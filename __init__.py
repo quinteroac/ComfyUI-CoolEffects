@@ -52,6 +52,12 @@ _water_drops_effect_module = _load_module_from_path(
 )
 CoolWaterDropsEffect = _water_drops_effect_module.CoolWaterDropsEffect
 
+_frosted_glass_effect_module = _load_module_from_path(
+    "cool_effects_frosted_glass_effect_runtime",
+    PACKAGE_ROOT / "nodes" / "frosted_glass_effect.py",
+)
+CoolFrostedGlassEffect = _frosted_glass_effect_module.CoolFrostedGlassEffect
+
 _pan_left_effect_module = _load_module_from_path(
     "cool_effects_pan_left_effect_runtime",
     PACKAGE_ROOT / "nodes" / "pan_left_effect.py",
@@ -107,6 +113,7 @@ NODE_CLASS_MAPPINGS = {
     "CoolVHSEffect": CoolVHSEffect,
     "CoolZoomPulseEffect": CoolZoomPulseEffect,
     "CoolWaterDropsEffect": CoolWaterDropsEffect,
+    "CoolFrostedGlassEffect": CoolFrostedGlassEffect,
     "CoolPanLeftEffect": CoolPanLeftEffect,
     "CoolPanRightEffect": CoolPanRightEffect,
     "CoolPanUpEffect": CoolPanUpEffect,
@@ -120,6 +127,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CoolVHSEffect": "Cool VHS Effect",
     "CoolZoomPulseEffect": "Cool Zoom Pulse Effect",
     "CoolWaterDropsEffect": "Cool Water Drops Effect",
+    "CoolFrostedGlassEffect": "Cool Frosted Glass Effect",
     "CoolPanLeftEffect": "Cool Pan Left Effect",
     "CoolPanRightEffect": "Cool Pan Right Effect",
     "CoolPanUpEffect": "Cool Pan Up Effect",
