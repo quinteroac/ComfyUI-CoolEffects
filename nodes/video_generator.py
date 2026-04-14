@@ -231,7 +231,8 @@ def _save_video_preview_to_temp(video) -> list[dict]:
 class CoolVideoGenerator:
     """Generates effect frames, assembles a VIDEO, and previews it in the canvas widget.
 
-    - effect_params optional: when omitted the input frames are used as-is.
+    - effect_count controls how many effect_params_N inputs are active (1-8).
+    - Effects are applied sequentially: the output of each becomes the input of the next.
     - audio optional: adds an audio track to the output VIDEO.
     - Outputs VIDEO so it can be piped into SaveVideo if needed.
     """
@@ -243,9 +244,10 @@ class CoolVideoGenerator:
                 "image": ("IMAGE",),
                 "fps": ("INT", {"default": 30, "min": 1, "max": 60}),
                 "duration": ("FLOAT", {"default": 3.0, "min": 0.5, "max": 60.0, "step": 0.5}),
+                "effect_count": ("INT", {"default": 1, "min": 1, "max": 8}),
             },
             "optional": {
-                "effect_params": (EFFECT_PARAMS,),
+                "effect_params_1": (EFFECT_PARAMS,),
                 "audio": ("AUDIO",),
             },
         }
@@ -256,12 +258,21 @@ class CoolVideoGenerator:
     OUTPUT_NODE = True
     CATEGORY = "CoolEffects"
 
-    def execute(self, image, fps, duration, effect_params=None, audio=None):
+    def execute(self, image, fps, duration, effect_count=1, audio=None, **kwargs):
         from comfy_api.latest import InputImpl, Types  # type: ignore
 
-        # 1. Render frames with GLSL shaders, or repeat input frames to fill duration
-        if effect_params is not None:
-            frames = _render_frames(image, effect_params, fps, duration)
+        # 1. Collect effect_params_1 … effect_params_N in order (up to effect_count)
+        effect_params_list = []
+        for i in range(1, effect_count + 1):
+            param = kwargs.get(f"effect_params_{i}")
+            if param is not None:
+                effect_params_list.append(param)
+
+        # 2. Render frames: apply effects sequentially, or repeat input if none connected
+        if effect_params_list:
+            frames = image
+            for effect_params in effect_params_list:
+                frames = _render_frames(frames, effect_params, fps, duration)
         else:
             frame_count = round(duration * fps)
             source = image if image.ndim == 4 else image.unsqueeze(0)
@@ -269,12 +280,12 @@ class CoolVideoGenerator:
             indices = [i % source_count for i in range(frame_count)]
             frames = source[indices]
 
-        # 2. Pack frames (+ optional audio) into a VIDEO object
+        # 3. Pack frames (+ optional audio) into a VIDEO object
         video = InputImpl.VideoFromComponents(
             Types.VideoComponents(images=frames, audio=audio, frame_rate=Fraction(fps))
         )
 
-        # 3. Save to temp and expose the preview URL for the canvas widget
+        # 4. Save to temp and expose the preview URL for the canvas widget
         normalized_entries: list[dict] = []
         try:
             normalized_entries = _save_video_preview_to_temp(video)

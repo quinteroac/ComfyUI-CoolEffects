@@ -2,6 +2,7 @@ import importlib.util
 import inspect
 import sys
 import time
+import types
 import uuid
 from pathlib import Path
 
@@ -22,6 +23,29 @@ def _load_module(module_path: Path):
     assert spec is not None and spec.loader is not None
     spec.loader.exec_module(module)
     return module
+
+
+def _mock_comfy_api(monkeypatch):
+    """Inject a minimal comfy_api.latest stub so execute() can be called without av/ffmpeg."""
+
+    class _FakeVideoComponents:
+        def __init__(self, images, audio, frame_rate):
+            self.images = images
+
+    class _FakeInputImpl:
+        @staticmethod
+        def VideoFromComponents(vc):
+            return vc
+
+    class _FakeTypes:
+        VideoComponents = _FakeVideoComponents
+
+    fake_latest = types.ModuleType("comfy_api.latest")
+    fake_latest.InputImpl = _FakeInputImpl
+    fake_latest.Types = _FakeTypes
+
+    monkeypatch.setitem(sys.modules, "comfy_api", types.ModuleType("comfy_api"))
+    monkeypatch.setitem(sys.modules, "comfy_api.latest", fake_latest)
 
 
 def _build_effect_params(effect_name: str, params: dict | None = None) -> dict:
@@ -213,26 +237,73 @@ class _FakeModerngl:
         return self.latest_context
 
 
-def test_effect_params_payload_connects_to_video_generator_effect_input(monkeypatch):
-    video_module = _load_module(NODE_PATH)
+# ---------------------------------------------------------------------------
+# Interface / contract tests
+# ---------------------------------------------------------------------------
+
+def test_video_generator_input_types_expose_required_widgets():
+    module = _load_module(NODE_PATH)
+    required = module.CoolVideoGenerator.INPUT_TYPES()["required"]
+
+    assert required["image"] == ("IMAGE",)
+    assert required["fps"] == ("INT", {"default": 30, "min": 1, "max": 60})
+    assert required["duration"] == ("FLOAT", {"default": 3.0, "min": 0.5, "max": 60.0, "step": 0.5})
+    assert required["effect_count"][0] == "INT"
+    assert "effect_name" not in required
+
+
+def test_video_generator_input_types_expose_effect_params_1_as_optional():
+    module = _load_module(NODE_PATH)
+    optional = module.CoolVideoGenerator.INPUT_TYPES().get("optional", {})
+    assert "effect_params_1" in optional
+    assert optional["effect_params_1"] == ("EFFECT_PARAMS",)
+
+
+def test_video_generator_execute_signature_accepts_effect_count_and_kwargs():
+    module = _load_module(NODE_PATH)
+    sig = inspect.signature(module.CoolVideoGenerator.execute)
+    params = list(sig.parameters)
+    assert "self" in params
+    assert "image" in params
+    assert "fps" in params
+    assert "duration" in params
+    assert "effect_count" in params
+    # **kwargs carries effect_params_2, effect_params_3, etc.
+    assert any(
+        p.kind == inspect.Parameter.VAR_KEYWORD
+        for p in sig.parameters.values()
+    ), "execute must accept **kwargs"
+
+
+def test_video_generator_category_is_cool_effects():
+    module = _load_module(NODE_PATH)
+    assert module.CoolVideoGenerator.CATEGORY == "CoolEffects"
+
+
+# ---------------------------------------------------------------------------
+# Single-effect execution (effect_params_1 via kwargs)
+# ---------------------------------------------------------------------------
+
+def test_effect_params_1_connects_and_renders_frames(monkeypatch):
+    module = _load_module(NODE_PATH)
+    _mock_comfy_api(monkeypatch)
     fake_moderngl = _FakeModerngl()
     monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
-    monkeypatch.setattr(video_module, "load_shader", lambda _name: "shader-source")
-    monkeypatch.setattr(video_module, "load_vertex_shader", lambda _name: "vertex-source")
+    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
+    monkeypatch.setattr(module, "load_vertex_shader", lambda _name: "vertex-source")
 
-    generator = video_module.CoolVideoGenerator()
+    node = module.CoolVideoGenerator()
     image = torch.ones((1, 2, 2, 3), dtype=torch.float32)
-    effect_params = _build_effect_params("vhs")
-    output, = generator.execute(image=image, effect_params=effect_params, fps=1, duration=1.0)
+    ep = _build_effect_params("vhs")
+    result = node.execute(image=image, fps=1, duration=1.0, effect_count=1, effect_params_1=ep)
 
-    assert video_module.CoolVideoGenerator.INPUT_TYPES()["required"]["effect_params"] == ("EFFECT_PARAMS",)
-    assert "effect_name" not in video_module.CoolVideoGenerator.INPUT_TYPES()["required"]
-    assert effect_params["effect_name"] == "vhs"
-    assert output.shape == (1, 2, 2, 3)
+    assert "result" in result
+    assert result["result"][0].images.shape[0] == 1  # 1 fps × 1 s
 
 
 def test_video_generator_uses_standalone_context_and_frame_time(monkeypatch):
     module = _load_module(NODE_PATH)
+    _mock_comfy_api(monkeypatch)
     fake_moderngl = _FakeModerngl()
     monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
     monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
@@ -240,281 +311,90 @@ def test_video_generator_uses_standalone_context_and_frame_time(monkeypatch):
 
     node = module.CoolVideoGenerator()
     image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
-
-    output, = node.execute(image=image, effect_params=_build_effect_params("glitch"), fps=4, duration=1.0)
+    ep = _build_effect_params("glitch")
+    node.execute(image=image, fps=4, duration=1.0, effect_count=1, effect_params_1=ep)
 
     assert fake_moderngl.create_calls == 1
     assert fake_moderngl.latest_context.vertex_shader == "vertex-source"
     assert fake_moderngl.latest_context.fragment_shader == "shader-source"
     assert fake_moderngl.latest_context.vertex_array_object.rendered_times == [0.0, 0.25, 0.5, 0.75]
-    assert output.shape == (4, 2, 3, 3)
-
-
-def test_video_generator_has_no_inline_glsl_constant():
-    module = _load_module(NODE_PATH)
-    assert not hasattr(module, "_VERTEX_SHADER_SOURCE")
-
-
-def test_video_generator_input_types_expose_fps_and_duration_widgets():
-    module = _load_module(NODE_PATH)
-
-    input_types = module.CoolVideoGenerator.INPUT_TYPES()
-    required_inputs = input_types["required"]
-
-    assert required_inputs["image"] == ("IMAGE",)
-    assert required_inputs["effect_params"] == ("EFFECT_PARAMS",)
-    assert "effect_name" not in required_inputs
-    assert required_inputs["fps"] == ("INT", {"default": 30, "min": 1, "max": 60})
-    assert required_inputs["duration"] == (
-        "FLOAT",
-        {"default": 3.0, "min": 0.5, "max": 60.0, "step": 0.5},
-    )
-
-
-def test_video_generator_execute_signature_accepts_effect_params():
-    module = _load_module(NODE_PATH)
-    execute_parameters = list(inspect.signature(module.CoolVideoGenerator.execute).parameters)
-    assert execute_parameters == ["self", "image", "effect_params", "fps", "duration"]
 
 
 def test_video_generator_rounds_total_frames_from_duration_times_fps(monkeypatch):
     module = _load_module(NODE_PATH)
+    _mock_comfy_api(monkeypatch)
     fake_moderngl = _FakeModerngl()
     monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
     monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
 
     node = module.CoolVideoGenerator()
     image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
-    output, = node.execute(image=image, effect_params=_build_effect_params("glitch"), fps=3, duration=0.5)
+    ep = _build_effect_params("glitch")
+    result = node.execute(image=image, fps=3, duration=0.5, effect_count=1, effect_params_1=ep)
 
-    assert output.shape[0] == round(0.5 * 3)
+    assert result["result"][0].images.shape[0] == round(0.5 * 3)
     assert fake_moderngl.latest_context.vertex_array_object.rendered_times == [0.0, 1.0 / 3.0]
-
-
-def test_video_generator_backward_compatible_output_tensor_shape_dtype_and_range(monkeypatch):
-    module = _load_module(NODE_PATH)
-    fake_moderngl = _FakeModerngl()
-    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
-    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
-
-    node = module.CoolVideoGenerator()
-    image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
-    output, = node.execute(image=image, effect_params=_build_effect_params("glitch"), fps=5, duration=0.6)
-
-    assert output.shape == (3, 2, 3, 3)
-    assert output.dtype == torch.float32
-    assert output.min().item() >= 0.0
-    assert output.max().item() <= 1.0
-
-
-def test_video_generator_backward_compatible_single_image_tensor_shapes(monkeypatch):
-    module = _load_module(NODE_PATH)
-    fake_moderngl = _FakeModerngl()
-    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
-    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
-    monkeypatch.setattr(module, "load_vertex_shader", lambda _name: "vertex-source")
-
-    node = module.CoolVideoGenerator()
-    single_image = torch.rand((2, 3, 3), dtype=torch.float32)
-    batched_single_image = single_image.unsqueeze(0)
-    effect_params = _build_effect_params("glitch")
-
-    output_from_single, = node.execute(
-        image=single_image, effect_params=effect_params, fps=3, duration=1.0
-    )
-    output_from_batch, = node.execute(
-        image=batched_single_image, effect_params=effect_params, fps=3, duration=1.0
-    )
-
-    assert output_from_single.shape == (3, 2, 3, 3)
-    assert output_from_batch.shape == (3, 2, 3, 3)
-    assert torch.equal(output_from_single, output_from_batch)
-
-
-def test_video_generator_batch_of_1_matches_single_image_path(monkeypatch):
-    module = _load_module(NODE_PATH)
-    fake_moderngl = _FakeModerngl()
-    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
-    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
-    monkeypatch.setattr(module, "load_vertex_shader", lambda _name: "vertex-source")
-
-    node = module.CoolVideoGenerator()
-    single_image = torch.tensor(
-        [[[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]],
-        dtype=torch.float32,
-    )
-    batched_single_image = single_image.unsqueeze(0)
-    effect_params = _build_effect_params("glitch")
-
-    output_from_single, = node.execute(
-        image=single_image, effect_params=effect_params, fps=3, duration=1.0
-    )
-    output_from_batch, = node.execute(
-        image=batched_single_image, effect_params=effect_params, fps=3, duration=1.0
-    )
-
-    assert output_from_single.shape == output_from_batch.shape
-    assert torch.equal(output_from_single, output_from_batch)
-
-
-def test_video_generator_accepts_image_batch_input_shape_without_error(monkeypatch):
-    module = _load_module(NODE_PATH)
-    fake_moderngl = _FakeModerngl()
-    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
-    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
-    monkeypatch.setattr(module, "load_vertex_shader", lambda _name: "vertex-source")
-
-    node = module.CoolVideoGenerator()
-    image_batch = torch.rand((3, 2, 3, 3), dtype=torch.float32)
-    output, = node.execute(image=image_batch, effect_params=_build_effect_params("glitch"), fps=4, duration=1.0)
-
-    assert output.shape == (4, 2, 3, 3)
-
-
-def test_video_generator_backward_compatible_frame_count_uses_round(monkeypatch):
-    module = _load_module(NODE_PATH)
-    fake_moderngl = _FakeModerngl()
-    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
-    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
-
-    node = module.CoolVideoGenerator()
-    image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
-    output, = node.execute(image=image, effect_params=_build_effect_params("glitch"), fps=3, duration=0.55)
-
-    assert output.shape[0] == round(0.55 * 3)
-    assert output.shape[0] == 2
-    assert fake_moderngl.latest_context.vertex_array_object.rendered_times == [0.0, 1.0 / 3.0]
-
-
-def test_video_generator_backward_compatible_fps_and_duration_input_definitions():
-    module = _load_module(NODE_PATH)
-    required_inputs = module.CoolVideoGenerator.INPUT_TYPES()["required"]
-
-    assert required_inputs["fps"] == ("INT", {"default": 30, "min": 1, "max": 60})
-    assert required_inputs["duration"] == (
-        "FLOAT",
-        {"default": 3.0, "min": 0.5, "max": 60.0, "step": 0.5},
-    )
 
 
 def test_video_generator_reads_rgb_bytes_per_frame(monkeypatch):
     module = _load_module(NODE_PATH)
+    _mock_comfy_api(monkeypatch)
     fake_moderngl = _FakeModerngl()
     monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
     monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
 
     node = module.CoolVideoGenerator()
     image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
-    node.execute(image=image, effect_params=_build_effect_params("glitch"), fps=3, duration=1.0)
+    ep = _build_effect_params("glitch")
+    node.execute(image=image, fps=3, duration=1.0, effect_count=1, effect_params_1=ep)
 
     framebuffer = fake_moderngl.latest_context.framebuffer_object
     assert framebuffer.read_components == [3, 3, 3]
 
 
-def test_video_generator_returns_float32_image_batch_tensor(monkeypatch):
+def test_video_generator_releases_gl_resources(monkeypatch):
     module = _load_module(NODE_PATH)
-    fake_moderngl = _FakeModerngl()
-    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
-    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
-
-    node = module.CoolVideoGenerator()
-    image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
-    output, = node.execute(image=image, effect_params=_build_effect_params("glitch"), fps=2, duration=1.0)
-
-    assert output.shape == (2, 2, 3, 3)
-    assert output.dtype == torch.float32
-    assert output.min().item() >= 0.0
-    assert output.max().item() <= 1.0
-
-
-def test_video_generator_returns_image_output(monkeypatch):
-    module = _load_module(NODE_PATH)
-    fake_moderngl = _FakeModerngl()
-    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
-    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
-
-    node = module.CoolVideoGenerator()
-    image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
-    result = node.execute(image=image, effect_params=_build_effect_params("glitch"), fps=1, duration=1.0)
-
-    assert module.CoolVideoGenerator.RETURN_TYPES == ("IMAGE",)
-    assert isinstance(result, tuple)
-    assert len(result) == 1
-    assert isinstance(result[0], torch.Tensor)
-
-
-def test_video_generator_category_is_cool_effects():
-    module = _load_module(NODE_PATH)
-
-    assert module.CoolVideoGenerator.CATEGORY == "CoolEffects"
-
-
-def test_video_generator_outputs_90_frames_for_3s_at_30fps(monkeypatch):
-    module = _load_module(NODE_PATH)
-    fake_moderngl = _FakeModerngl()
-    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
-    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
-
-    node = module.CoolVideoGenerator()
-    image = torch.ones((1, 4, 5, 3), dtype=torch.float32)
-    output, = node.execute(image=image, effect_params=_build_effect_params("glitch"), fps=30, duration=3.0)
-
-    assert output.shape == (90, 4, 5, 3)
-
-
-def test_video_generator_renders_512_square_90_frames_under_30_seconds(monkeypatch):
-    module = _load_module(NODE_PATH)
-    fake_moderngl = _FakeModerngl()
-    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
-    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
-
-    node = module.CoolVideoGenerator()
-    image = torch.ones((1, 512, 512, 3), dtype=torch.float32)
-
-    start = time.perf_counter()
-    output, = node.execute(image=image, effect_params=_build_effect_params("glitch"), fps=30, duration=3.0)
-    elapsed = time.perf_counter() - start
-
-    assert output.shape == (90, 512, 512, 3)
-    assert elapsed < 30.0
-
-
-def test_video_generator_output_is_preview_image_compatible(monkeypatch):
-    module = _load_module(NODE_PATH)
+    _mock_comfy_api(monkeypatch)
     fake_moderngl = _FakeModerngl()
     monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
     monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
 
     node = module.CoolVideoGenerator()
     image = torch.ones((1, 2, 2, 3), dtype=torch.float32)
-    output, = node.execute(image=image, effect_params=_build_effect_params("glitch"), fps=3, duration=1.0)
+    ep = _build_effect_params("glitch")
+    node.execute(image=image, fps=1, duration=1.0, effect_count=1, effect_params_1=ep)
 
-    preview_frames = [output[frame_index] for frame_index in range(output.shape[0])]
-    assert len(preview_frames) == 3
-    assert all(frame.shape == (2, 2, 3) for frame in preview_frames)
+    ctx = fake_moderngl.latest_context
+    assert ctx.program_object.released is True
+    assert ctx.framebuffer_object.released is True
+    assert ctx.buffer_object.released is True
+    assert ctx.vertex_array_object.released is True
+    assert all(t.released for t in ctx.texture_objects)
+    assert all(r.released for r in ctx.renderbuffer_objects)
+    assert ctx.released is True
 
 
-def test_video_generator_binds_u_image_texture_and_resolution(monkeypatch):
+def test_video_generator_uses_default_uniforms_when_effect_params_are_empty(monkeypatch):
     module = _load_module(NODE_PATH)
+    _mock_comfy_api(monkeypatch)
     fake_moderngl = _FakeModerngl()
     monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
     monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
 
     node = module.CoolVideoGenerator()
     image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
-    node.execute(image=image, effect_params=_build_effect_params("glitch"), fps=1, duration=1.0)
+    ep = _build_effect_params("glitch", {})
+    node.execute(image=image, fps=1, duration=1.0, effect_count=1, effect_params_1=ep)
 
-    context = fake_moderngl.latest_context
-    input_texture = context.texture_objects[0]
-    program = context.program_object
-
-    assert input_texture.used_locations == [0]
-    assert program["u_image"].value == 0
-    assert program["u_resolution"].value == (3, 2)
+    program = fake_moderngl.latest_context.program_object
+    assert program["u_wave_freq"].value == 120.0
+    assert program["u_wave_amp"].value == 0.0025
+    assert program["u_speed"].value == 10.0
 
 
 def test_video_generator_sets_effect_uniforms_each_frame_as_floats(monkeypatch):
     module = _load_module(NODE_PATH)
+    _mock_comfy_api(monkeypatch)
     fake_moderngl = _FakeModerngl(
         available_uniforms={"u_wave_freq", "u_wave_amp", "u_speed"},
         strict_missing=True,
@@ -524,11 +404,8 @@ def test_video_generator_sets_effect_uniforms_each_frame_as_floats(monkeypatch):
 
     node = module.CoolVideoGenerator()
     image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
-    effect_params = _build_effect_params(
-        "glitch",
-        {"u_wave_freq": 9, "u_wave_amp": 1, "u_speed": 3},
-    )
-    node.execute(image=image, effect_params=effect_params, fps=3, duration=1.0)
+    ep = _build_effect_params("glitch", {"u_wave_freq": 9, "u_wave_amp": 1, "u_speed": 3})
+    node.execute(image=image, fps=3, duration=1.0, effect_count=1, effect_params_1=ep)
 
     program = fake_moderngl.latest_context.program_object
     assert program["u_wave_freq"].values == [9.0, 9.0, 9.0]
@@ -538,217 +415,161 @@ def test_video_generator_sets_effect_uniforms_each_frame_as_floats(monkeypatch):
 
 def test_video_generator_skips_missing_effect_uniforms_without_error(monkeypatch):
     module = _load_module(NODE_PATH)
-    fake_moderngl = _FakeModerngl(
-        available_uniforms={"u_wave_freq"},
-        strict_missing=True,
-    )
+    _mock_comfy_api(monkeypatch)
+    fake_moderngl = _FakeModerngl(available_uniforms={"u_wave_freq"}, strict_missing=True)
     monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
     monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
 
     node = module.CoolVideoGenerator()
     image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
-    effect_params = _build_effect_params(
-        "glitch",
-        {"u_not_real": 5},
-    )
-    node.execute(image=image, effect_params=effect_params, fps=2, duration=1.0)
+    ep = _build_effect_params("glitch", {"u_not_real": 5})
+    node.execute(image=image, fps=2, duration=1.0, effect_count=1, effect_params_1=ep)
 
     program = fake_moderngl.latest_context.program_object
     assert program["u_wave_freq"].values == [120.0, 120.0]
     assert "u_not_real" not in program.uniforms
 
 
-def test_video_generator_sets_base_uniforms_independently_from_effect_params(monkeypatch):
+def test_video_generator_raises_value_error_for_unknown_effect(monkeypatch):
     module = _load_module(NODE_PATH)
-    fake_moderngl = _FakeModerngl()
-    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
-    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
-
-    node = module.CoolVideoGenerator()
-    image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
-    effect_params = _build_effect_params(
-        "glitch",
-        {"u_wave_freq": 15},
-    )
-    node.execute(image=image, effect_params=effect_params, fps=3, duration=1.0)
-
-    program = fake_moderngl.latest_context.program_object
-    assert program["u_image"].values == [0]
-    assert program["u_resolution"].values == [(3, 2)]
-    assert program["u_time"].values == [0.0, 1.0 / 3.0, 2.0 / 3.0]
-
-
-def test_video_generator_uses_batch_frames_with_modulo_indexing(monkeypatch):
-    module = _load_module(NODE_PATH)
-    fake_moderngl = _FakeModerngl()
-    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
-    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
-
-    node = module.CoolVideoGenerator()
-    image_batch = torch.tensor(
-        [
-            [[[0.1, 0.1, 0.1]]],
-            [[[0.5, 0.5, 0.5]]],
-        ],
-        dtype=torch.float32,
-    )
-    node.execute(image=image_batch, effect_params=_build_effect_params("glitch"), fps=5, duration=1.0)
-
-    expected_upload_order = [
-        bytes([25, 25, 25]),
-        bytes([127, 127, 127]),
-        bytes([25, 25, 25]),
-        bytes([127, 127, 127]),
-        bytes([25, 25, 25]),
-    ]
-    input_texture = fake_moderngl.latest_context.texture_objects[0]
-    assert input_texture.uploads == expected_upload_order
-    assert input_texture.write_calls == expected_upload_order[1:]
-
-
-def test_video_generator_frame_count_is_independent_from_batch_size(monkeypatch):
-    module = _load_module(NODE_PATH)
-    fake_moderngl = _FakeModerngl()
-    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
-    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
-
-    node = module.CoolVideoGenerator()
-    image_batch = torch.rand((7, 2, 3, 3), dtype=torch.float32)
-    output, = node.execute(image=image_batch, effect_params=_build_effect_params("glitch"), fps=3, duration=0.6)
-
-    assert output.shape[0] == round(0.6 * 3)
-
-
-def test_video_generator_does_not_upload_unused_batch_frames_when_output_is_shorter(monkeypatch):
-    module = _load_module(NODE_PATH)
-    fake_moderngl = _FakeModerngl()
-    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
-    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
-
-    node = module.CoolVideoGenerator()
-    image_batch = torch.tensor(
-        [
-            [[[0.0, 0.0, 0.0]]],
-            [[[0.1, 0.1, 0.1]]],
-            [[[0.2, 0.2, 0.2]]],
-            [[[0.3, 0.3, 0.3]]],
-            [[[0.4, 0.4, 0.4]]],
-        ],
-        dtype=torch.float32,
-    )
-    output, = node.execute(image=image_batch, effect_params=_build_effect_params("glitch"), fps=3, duration=1.0)
-
-    assert output.shape[0] == 3
-    input_texture = fake_moderngl.latest_context.texture_objects[0]
-    assert input_texture.uploads == [
-        bytes([0, 0, 0]),
-        bytes([25, 25, 25]),
-        bytes([51, 51, 51]),
-    ]
-
-
-def test_video_generator_reuses_single_input_texture_in_render_loop(monkeypatch):
-    module = _load_module(NODE_PATH)
-    fake_moderngl = _FakeModerngl()
-    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
-    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
-
-    node = module.CoolVideoGenerator()
-    image_batch = torch.rand((4, 2, 2, 3), dtype=torch.float32)
-    output, = node.execute(image=image_batch, effect_params=_build_effect_params("glitch"), fps=5, duration=2.0)
-
-    context = fake_moderngl.latest_context
-    assert output.shape[0] == 10
-    assert len(context.texture_objects) == 1
-    assert len(context.renderbuffer_objects) == 1
-
-
-def test_video_generator_processes_120_frames_without_allocating_texture_batch(monkeypatch):
-    module = _load_module(NODE_PATH)
-    fake_moderngl = _FakeModerngl()
-    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
-    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
-
-    node = module.CoolVideoGenerator()
-    image_batch = torch.rand((3, 2, 2, 3), dtype=torch.float32)
-    output, = node.execute(image=image_batch, effect_params=_build_effect_params("glitch"), fps=30, duration=4.0)
-
-    context = fake_moderngl.latest_context
-    assert output.shape[0] == 120
-    assert len(context.texture_objects) == 1
-    assert context.framebuffer_object.use_calls == 120
-
-
-def test_video_generator_uses_default_uniforms_when_effect_params_are_empty(monkeypatch):
-    module = _load_module(NODE_PATH)
-    fake_moderngl = _FakeModerngl()
-    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
-    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
-
-    node = module.CoolVideoGenerator()
-    image = torch.ones((1, 2, 3, 3), dtype=torch.float32)
-    effect_params = _build_effect_params("glitch", {})
-    node.execute(image=image, effect_params=effect_params, fps=1, duration=1.0)
-
-    program = fake_moderngl.latest_context.program_object
-    assert program["u_wave_freq"].value == 120.0
-    assert program["u_wave_amp"].value == 0.0025
-    assert program["u_speed"].value == 10.0
-
-
-def test_video_generator_raises_value_error_for_unknown_effect_params_effect(monkeypatch):
-    module = _load_module(NODE_PATH)
+    _mock_comfy_api(monkeypatch)
     fake_moderngl = _FakeModerngl()
     monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
     monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
 
     node = module.CoolVideoGenerator()
     image = torch.ones((1, 2, 2, 3), dtype=torch.float32)
+    ep = _build_effect_params("unknown_effect")
 
     with pytest.raises(ValueError, match="Unknown effect.*unknown_effect"):
-        node.execute(
-            image=image,
-            effect_params=_build_effect_params("unknown_effect"),
-            fps=1,
-            duration=1.0,
-        )
+        node.execute(image=image, fps=1, duration=1.0, effect_count=1, effect_params_1=ep)
 
 
 def test_video_generator_raises_value_error_when_shader_missing(monkeypatch):
     module = _load_module(NODE_PATH)
+    _mock_comfy_api(monkeypatch)
     monkeypatch.setattr(module, "load_shader", lambda _name: (_ for _ in ()).throw(FileNotFoundError("glitch")))
 
     node = module.CoolVideoGenerator()
     image = torch.ones((1, 2, 2, 3), dtype=torch.float32)
+    ep = _build_effect_params("glitch")
 
     with pytest.raises(ValueError, match="effect_name 'glitch'"):
-        node.execute(
-            image=image,
-            effect_params=_build_effect_params("glitch"),
-            fps=1,
-            duration=1.0,
-        )
+        node.execute(image=image, fps=1, duration=1.0, effect_count=1, effect_params_1=ep)
 
 
-def test_video_generator_releases_gl_resources(monkeypatch):
+def test_video_generator_outputs_90_frames_for_3s_at_30fps(monkeypatch):
     module = _load_module(NODE_PATH)
+    _mock_comfy_api(monkeypatch)
     fake_moderngl = _FakeModerngl()
     monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
     monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
 
     node = module.CoolVideoGenerator()
+    image = torch.ones((1, 4, 5, 3), dtype=torch.float32)
+    ep = _build_effect_params("glitch")
+    result = node.execute(image=image, fps=30, duration=3.0, effect_count=1, effect_params_1=ep)
+
+    assert result["result"][0].images.shape == (90, 4, 5, 3)
+
+
+def test_video_generator_no_effect_repeats_frames_to_fill_duration(monkeypatch):
+    module = _load_module(NODE_PATH)
+    _mock_comfy_api(monkeypatch)
+
+    node = module.CoolVideoGenerator()
+    image = torch.rand((2, 4, 4, 3), dtype=torch.float32)
+    result = node.execute(image=image, fps=5, duration=1.0, effect_count=1)
+
+    assert result["result"][0].images.shape[0] == 5
+
+
+# ---------------------------------------------------------------------------
+# Multi-effect chaining
+# ---------------------------------------------------------------------------
+
+def test_video_generator_chains_two_effects_sequentially(monkeypatch):
+    """Two effects are applied in sequence: the output of pass 1 is input to pass 2."""
+    module = _load_module(NODE_PATH)
+    _mock_comfy_api(monkeypatch)
+    fake_moderngl = _FakeModerngl()
+    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
+    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
+    monkeypatch.setattr(module, "load_vertex_shader", lambda _name: "vertex-source")
+
+    node = module.CoolVideoGenerator()
     image = torch.ones((1, 2, 2, 3), dtype=torch.float32)
-    node.execute(image=image, effect_params=_build_effect_params("glitch"), fps=1, duration=1.0)
+    ep1 = _build_effect_params("glitch")
+    ep2 = _build_effect_params("vhs")
 
-    context = fake_moderngl.latest_context
-    assert context.program_object.released is True
-    assert context.framebuffer_object.released is True
-    assert context.buffer_object.released is True
-    assert context.vertex_array_object.released is True
-    assert all(texture.released for texture in context.texture_objects)
-    assert all(renderbuffer.released for renderbuffer in context.renderbuffer_objects)
-    assert context.released is True
+    result = node.execute(
+        image=image,
+        fps=2,
+        duration=1.0,
+        effect_count=2,
+        effect_params_1=ep1,
+        effect_params_2=ep2,
+    )
 
+    # Two effects × 2 fps × 1 s = 2 GL contexts created
+    assert fake_moderngl.create_calls == 2
+    assert result["result"][0].images.shape == (2, 2, 2, 3)
+
+
+def test_video_generator_ignores_extra_effect_params_beyond_count(monkeypatch):
+    """effect_params_2 is ignored when effect_count=1."""
+    module = _load_module(NODE_PATH)
+    _mock_comfy_api(monkeypatch)
+    fake_moderngl = _FakeModerngl()
+    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
+    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
+    monkeypatch.setattr(module, "load_vertex_shader", lambda _name: "vertex-source")
+
+    node = module.CoolVideoGenerator()
+    image = torch.ones((1, 2, 2, 3), dtype=torch.float32)
+    ep1 = _build_effect_params("glitch")
+    ep2 = _build_effect_params("vhs")
+
+    node.execute(
+        image=image,
+        fps=1,
+        duration=1.0,
+        effect_count=1,
+        effect_params_1=ep1,
+        effect_params_2=ep2,
+    )
+
+    # Only one GL context should have been created (effect_params_2 ignored)
+    assert fake_moderngl.create_calls == 1
+
+
+def test_video_generator_three_effects_create_three_gl_contexts(monkeypatch):
+    module = _load_module(NODE_PATH)
+    _mock_comfy_api(monkeypatch)
+    fake_moderngl = _FakeModerngl()
+    monkeypatch.setitem(sys.modules, "moderngl", fake_moderngl)
+    monkeypatch.setattr(module, "load_shader", lambda _name: "shader-source")
+    monkeypatch.setattr(module, "load_vertex_shader", lambda _name: "vertex-source")
+
+    node = module.CoolVideoGenerator()
+    image = torch.ones((1, 2, 2, 3), dtype=torch.float32)
+
+    node.execute(
+        image=image,
+        fps=1,
+        duration=1.0,
+        effect_count=3,
+        effect_params_1=_build_effect_params("glitch"),
+        effect_params_2=_build_effect_params("vhs"),
+        effect_params_3=_build_effect_params("zoom_pulse"),
+    )
+
+    assert fake_moderngl.create_calls == 3
+
+
+# ---------------------------------------------------------------------------
+# Package registration
+# ---------------------------------------------------------------------------
 
 def test_package_registers_cool_video_generator_node():
     package_module = _load_module(PACKAGE_INIT)

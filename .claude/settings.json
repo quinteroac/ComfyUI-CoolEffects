@@ -1,7 +1,18 @@
 {
   "permissions": {
     "allow": [
-      "Read(//home/victor/AI/Comfy/ComfyUI/**)"
+      "Read(//home/victor/AI/Comfy/ComfyUI/**)",
+      "Bash(python -m pytest tests/test_video_generator_node.py tests/test_video_generator_effect_params_contract.py -v)",
+      "Bash(python -m pytest tests/test_video_generator_node.py::test_effect_params_1_connects_and_renders_frames -v)",
+      "Bash(python -m pytest --ignore=tests/manual_gpu_benchmark.py -q)",
+      "Bash(git -C /home/victor/AI/Comfy/ComfyUI/custom_nodes/ComfyUI-CoolEffects diff --name-only HEAD)",
+      "Bash(git -C /home/victor/AI/Comfy/ComfyUI/custom_nodes/ComfyUI-CoolEffects stash)",
+      "Bash(python -m pytest tests/test_pan_left_effect_node.py tests/test_web_shader_loader.py -q)",
+      "Bash(git -C /home/victor/AI/Comfy/ComfyUI/custom_nodes/ComfyUI-CoolEffects stash pop)",
+      "Bash(git -C /home/victor/AI/Comfy/ComfyUI/custom_nodes/ComfyUI-CoolEffects stash list)",
+      "Bash(git -C /home/victor/AI/Comfy/ComfyUI/custom_nodes/ComfyUI-CoolEffects checkout -- __pycache__/ nodes/__pycache__/)",
+      "Bash(git -C /home/victor/AI/Comfy/ComfyUI/custom_nodes/ComfyUI-CoolEffects checkout -- .claude/settings.json)",
+      "Bash(python -m pytest tests/test_video_generator_node.py tests/test_video_generator_effect_params_contract.py -q)"
     ]
   }
 }

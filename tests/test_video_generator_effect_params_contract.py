@@ -25,6 +25,13 @@ def _get_method(class_node: ast.ClassDef, method_name: str) -> ast.FunctionDef:
     raise AssertionError(f"{method_name} method not found")
 
 
+def _get_module_function(module_tree: ast.Module, func_name: str) -> ast.FunctionDef:
+    for node in module_tree.body:
+        if isinstance(node, ast.FunctionDef) and node.name == func_name:
+            return node
+    raise AssertionError(f"Module-level function '{func_name}' not found")
+
+
 def _subscript_string_key(node: ast.Subscript) -> str | None:
     slice_node = node.slice
     if isinstance(slice_node, ast.Constant) and isinstance(slice_node.value, str):
@@ -58,7 +65,22 @@ def test_video_generator_loads_effect_params_constant_from_effect_params_module(
     assert value.attr == "EFFECT_PARAMS"
 
 
-def test_input_types_declares_effect_params_as_required_effect_params_type():
+def test_input_types_declares_effect_params_1_as_optional_effect_params_type():
+    class_node = _get_cool_video_generator_class()
+    input_types_method = _get_method(class_node, "INPUT_TYPES")
+    return_statement = next(node for node in input_types_method.body if isinstance(node, ast.Return))
+    input_types = return_statement.value
+    assert isinstance(input_types, ast.Dict)
+    optional_inputs = _dict_value_for_key(input_types, "optional")
+    assert isinstance(optional_inputs, ast.Dict)
+    effect_params_input = _dict_value_for_key(optional_inputs, "effect_params_1")
+    assert isinstance(effect_params_input, ast.Tuple)
+    assert len(effect_params_input.elts) == 1
+    assert isinstance(effect_params_input.elts[0], ast.Name)
+    assert effect_params_input.elts[0].id == "EFFECT_PARAMS"
+
+
+def test_input_types_declares_effect_count_as_required_int():
     class_node = _get_cool_video_generator_class()
     input_types_method = _get_method(class_node, "INPUT_TYPES")
     return_statement = next(node for node in input_types_method.body if isinstance(node, ast.Return))
@@ -66,12 +88,11 @@ def test_input_types_declares_effect_params_as_required_effect_params_type():
     assert isinstance(input_types, ast.Dict)
     required_inputs = _dict_value_for_key(input_types, "required")
     assert isinstance(required_inputs, ast.Dict)
-    effect_params_input = _dict_value_for_key(required_inputs, "effect_params")
-    assert isinstance(effect_params_input, ast.Tuple)
-    assert len(effect_params_input.elts) == 1
-    assert isinstance(effect_params_input.elts[0], ast.Name)
-
-    assert effect_params_input.elts[0].id == "EFFECT_PARAMS"
+    effect_count_input = _dict_value_for_key(required_inputs, "effect_count")
+    assert isinstance(effect_count_input, ast.Tuple)
+    assert len(effect_count_input.elts) >= 1
+    assert isinstance(effect_count_input.elts[0], ast.Constant)
+    assert effect_count_input.elts[0].value == "INT"
 
 
 def test_input_types_does_not_include_effect_name_string_input():
@@ -90,59 +111,63 @@ def test_input_types_does_not_include_effect_name_string_input():
     assert "effect_name" not in required_keys
 
 
-def test_execute_signature_accepts_effect_params_input():
+def test_execute_signature_accepts_effect_count_and_kwargs():
     class_node = _get_cool_video_generator_class()
     execute_method = _get_method(class_node, "execute")
     execute_parameters = [arg.arg for arg in execute_method.args.args]
+    assert "self" in execute_parameters
+    assert "image" in execute_parameters
+    assert "fps" in execute_parameters
+    assert "duration" in execute_parameters
+    assert "effect_count" in execute_parameters
+    # **kwargs must be present to receive dynamic effect_params_N inputs
+    assert execute_method.args.kwarg is not None, "execute must accept **kwargs"
 
-    assert execute_parameters == ["self", "image", "effect_params", "fps", "duration"]
 
-
-def test_execute_calls_merge_params_with_effect_params_bundle_fields():
-    class_node = _get_cool_video_generator_class()
-    execute_method = _get_method(class_node, "execute")
+def test_render_frames_calls_merge_params_with_effect_params_bundle_fields():
+    """_render_frames is the helper that owns the GL rendering loop."""
+    module_tree = _get_module_tree()
+    render_frames = _get_module_function(module_tree, "_render_frames")
 
     merge_calls = [
-        node for node in ast.walk(execute_method)
+        node for node in ast.walk(render_frames)
         if isinstance(node, ast.Call)
         and isinstance(node.func, ast.Name)
         and node.func.id == "merge_params"
     ]
-    assert merge_calls, "execute must call merge_params(...)"
+    assert merge_calls, "_render_frames must call merge_params(...)"
 
-    expected = False
+    found_effect_name_subscript = False
+    found_params_subscript = False
     for call in merge_calls:
-        if len(call.args) != 2:
-            continue
-        first, second = call.args
-        if (
-            isinstance(first, ast.Subscript)
-            and isinstance(second, ast.Subscript)
-            and isinstance(first.value, ast.Name)
-            and first.value.id == "effect_params"
-            and isinstance(second.value, ast.Name)
-            and second.value.id == "effect_params"
-            and _subscript_string_key(first) == "effect_name"
-            and _subscript_string_key(second) == "params"
-        ):
-            expected = True
-            break
+        for arg in call.args:
+            if (
+                isinstance(arg, ast.Subscript)
+                and isinstance(arg.value, ast.Name)
+                and arg.value.id == "effect_params"
+            ):
+                key = _subscript_string_key(arg)
+                if key == "effect_name":
+                    found_effect_name_subscript = True
+                if key == "params":
+                    found_params_subscript = True
 
-    assert expected, "execute must call merge_params(effect_params['effect_name'], effect_params['params'])"
+    assert found_effect_name_subscript, "_render_frames must pass effect_params['effect_name'] to merge_params"
+    assert found_params_subscript, "_render_frames must pass effect_params['params'] to merge_params"
 
 
-def test_execute_sets_merged_uniforms_per_frame_with_float_cast_and_missing_skip():
-    class_node = _get_cool_video_generator_class()
-    execute_method = _get_method(class_node, "execute")
+def test_render_frames_sets_merged_uniforms_per_frame_with_float_cast_and_missing_skip():
+    module_tree = _get_module_tree()
+    render_frames = _get_module_function(module_tree, "_render_frames")
 
     frame_loops = [
-        node for node in ast.walk(execute_method)
+        node for node in ast.walk(render_frames)
         if isinstance(node, ast.For)
         and isinstance(node.iter, ast.Call)
         and isinstance(node.iter.func, ast.Name)
         and node.iter.func.id == "range"
     ]
-    assert frame_loops, "execute must iterate over rendered frames"
+    assert frame_loops, "_render_frames must iterate over rendered frames"
 
     found_inner_uniform_loop = False
     found_float_assignment = False
@@ -188,20 +213,20 @@ def test_execute_sets_merged_uniforms_per_frame_with_float_cast_and_missing_skip
                     if isinstance(node.type, ast.Name) and node.type.id == "KeyError":
                         found_missing_uniform_skip = True
 
-    assert found_inner_uniform_loop, "execute must loop through final_uniform_params.items() inside frame loop"
-    assert found_float_assignment, "execute must assign float(uniform_value) to program[uniform_name].value"
-    assert found_missing_uniform_skip, "execute must skip missing uniforms via KeyError handling"
+    assert found_inner_uniform_loop, "_render_frames must loop through final_uniform_params.items() inside frame loop"
+    assert found_float_assignment, "_render_frames must assign float(uniform_value) to program[uniform_name].value"
+    assert found_missing_uniform_skip, "_render_frames must skip missing uniforms via KeyError handling"
 
 
-def test_execute_keeps_base_uniform_assignments():
-    class_node = _get_cool_video_generator_class()
-    execute_method = _get_method(class_node, "execute")
+def test_render_frames_keeps_base_uniform_assignments():
+    module_tree = _get_module_tree()
+    render_frames = _get_module_function(module_tree, "_render_frames")
 
     has_u_image_assignment = False
     has_u_resolution_assignment = False
     has_u_time_assignment = False
 
-    for node in ast.walk(execute_method):
+    for node in ast.walk(render_frames):
         if not isinstance(node, ast.Assign) or len(node.targets) != 1:
             continue
         target = node.targets[0]
