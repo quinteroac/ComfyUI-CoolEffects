@@ -12,7 +12,12 @@ def test_shared_effect_node_widget_helper_exists_with_mount_api():
 
 
 def test_effect_extensions_use_shared_effect_node_widget_helper():
-    for widget_file_name in ("glitch_effect.js", "vhs_effect.js", "zoom_pulse_effect.js"):
+    for widget_file_name in (
+        "glitch_effect.js",
+        "vhs_effect.js",
+        "zoom_pulse_effect.js",
+        "water_drops_effect.js",
+    ):
         widget_source = (WEB_DIR / widget_file_name).read_text(encoding="utf-8")
         assert 'from "./effect_node_widget.js"' in widget_source
         assert "mount_effect_node_widget(" in widget_source

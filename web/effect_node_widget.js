@@ -51,6 +51,14 @@ const EFFECT_DEFAULT_UNIFORMS = Object.freeze({
         u_dir_y: 0.7071,
         u_zoom: 0.0,
     }),
+    water_drops: Object.freeze({
+        u_drop_density: 60.0,
+        u_drop_size: 0.08,
+        u_fall_speed: 1.0,
+        u_refraction_strength: 0.3,
+        u_gravity: 1.0,
+        u_wind: 0.0,
+    }),
 });
 
 function default_now() {
