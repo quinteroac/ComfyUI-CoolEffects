@@ -76,6 +76,12 @@ _pan_diagonal_effect_module = _load_module_from_path(
 )
 CoolPanDiagonalEffect = _pan_diagonal_effect_module.CoolPanDiagonalEffect
 
+_video_player_module = _load_module_from_path(
+    "cool_effects_video_player_runtime",
+    PACKAGE_ROOT / "nodes" / "video_player.py",
+)
+CoolVideoPlayer = _video_player_module.CoolVideoPlayer
+
 _video_generator_import_error = None
 try:
     _video_generator_module = _load_module_from_path(
@@ -99,6 +105,7 @@ NODE_CLASS_MAPPINGS = {
     "CoolPanUpEffect": CoolPanUpEffect,
     "CoolPanDownEffect": CoolPanDownEffect,
     "CoolPanDiagonalEffect": CoolPanDiagonalEffect,
+    "CoolVideoPlayer": CoolVideoPlayer,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     "CoolEffectSelector": "Cool Effect Selector",
@@ -110,6 +117,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CoolPanUpEffect": "Cool Pan Up Effect",
     "CoolPanDownEffect": "Cool Pan Down Effect",
     "CoolPanDiagonalEffect": "Cool Pan Diagonal Effect",
+    "CoolVideoPlayer": "Cool Video Player",
 }
 
 if CoolVideoGenerator is not None:
