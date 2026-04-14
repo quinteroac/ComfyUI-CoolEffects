@@ -957,10 +957,12 @@ export function register_comfy_extension(
         return false;
     }
 
+    const NODES_WITH_VIDEO_WIDGET = new Set(["CoolVideoPlayer", "CoolVideoGenerator"]);
+
     app_ref.registerExtension({
         name: EXTENSION_NAME,
         async beforeRegisterNodeDef(nodeType, nodeData) {
-            if (nodeData?.name !== "CoolVideoPlayer") {
+            if (!NODES_WITH_VIDEO_WIDGET.has(nodeData?.name)) {
                 return;
             }
 
