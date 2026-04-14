@@ -29,3 +29,13 @@
 **Pitfalls Encountered:** The injected acceptance criteria were truncated, so the full PRD file was referenced to confirm complete AC wording before implementing tests.
 
 **Useful Context for Future Agents:** The fake framebuffer returns deterministic per-pass bytes (`bytes([frame_index])`), which makes composition-order assertions reliable by checking second-pass texture uploads; this is the quickest way to validate effect chaining without GPU-dependent rendering snapshots.
+
+## US-004 — Directional Blur Quality
+
+**Summary:** Updated `frosted_glass.frag` so its 8-direction blur uses per-direction procedural perturbation (angle and radius), and strengthened high-intensity frost veiling so large blur radii read as heavily obscured while mid settings remain recognizable.
+
+**Key Decisions:** Kept the existing 8-sample ring for performance/compatibility, but introduced hash-based `dir_noise` and `radial_noise` per direction to break uniform ring artifacts. Added tests in `tests/test_frosted_glass_shader.py` that directly assert perturbed sampling logic and validate medium/high parameter behavior through shader-equation thresholds.
+
+**Pitfalls Encountered:** The acceptance criteria text in injected context was truncated; the PRD markdown artifact was used to recover the full AC wording before tuning shader logic and writing assertions.
+
+**Useful Context for Future Agents:** Full visual-output regression tests are not available in this repo; shader ACs are currently validated through source-contract assertions plus parameter-response math checks. If future iterations add GPU snapshot tests, keep these deterministic formula checks as fast guardrails.

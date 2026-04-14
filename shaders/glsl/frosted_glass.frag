@@ -57,14 +57,18 @@ void main() {
     vec3 blur_sum = center_sample;
     float weight_sum = 1.0;
     float angle_step = 0.78539816339; // 2*PI / 8
-    float jitter = (frost_noise - 0.5) * 0.7;
+    float base_jitter = (frost_noise - 0.5) * 0.7;
     float blur_radius = max(0.0, u_blur_radius);
+    vec2 noise_seed = uv * u_resolution * (1.0 + uniformity * 0.75);
 
     for (int i = 0; i < 8; i++) {
         float angle = float(i) * angle_step;
-        vec2 direction = vec2(cos(angle), sin(angle));
-        float radial_offset = blur_radius * (1.0 + jitter * 0.55);
-        vec2 sample_uv = clamp(uv + direction * radial_offset, vec2(0.0), vec2(1.0));
+        float dir_noise = hash12(noise_seed + vec2(float(i) * 17.0, time_phase * 13.0));
+        float radial_noise = hash12(noise_seed.yx + vec2(float(i) * 11.0, -time_phase * 7.0));
+        float angle_perturb = (dir_noise - 0.5) * 0.55;
+        vec2 direction = vec2(cos(angle + angle_perturb), sin(angle + angle_perturb));
+        float radial_offset = blur_radius * (1.0 + base_jitter * 0.35 + (radial_noise - 0.5) * 0.8);
+        vec2 sample_uv = clamp(uv + direction * max(radial_offset, 0.0), vec2(0.0), vec2(1.0));
         vec3 sample_color = texture(u_image, sample_uv).rgb;
         blur_sum += sample_color;
         weight_sum += 1.0;
@@ -79,7 +83,10 @@ void main() {
     vec3 warm_tint = vec3(1.06, 1.0, 0.9);
     float tint_mix = clamp((u_tint_temperature + 1.0) * 0.5, 0.0, 1.0);
     vec3 tint = mix(cold_tint, warm_tint, tint_mix);
-    vec3 frosted_color = softened * tint + vec3(0.09) * patch_mask;
+    vec3 frosted_color = softened * tint + vec3(0.14) * patch_mask * condensation;
+    float frost_veil = clamp(condensation * (0.2 + frost_intensity * 0.35), 0.0, 0.65);
+    vec3 veiled_color = mix(softened, frosted_color, patch_mask);
+    vec3 final_color = mix(veiled_color, vec3(1.0), frost_veil * patch_mask);
 
-    fragColor = vec4(clamp(mix(softened, frosted_color, patch_mask), 0.0, 1.0), 1.0);
+    fragColor = vec4(clamp(final_color, 0.0, 1.0), 1.0);
 }
