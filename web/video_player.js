@@ -498,6 +498,12 @@ function set_playback_state(widget_state, should_play) {
         const play_result = widget_state.video_element.play();
         if (play_result && typeof play_result.then === "function") {
             play_result.catch((error) => {
+                // AbortError fires when src changes before the play() promise
+                // resolves (e.g. a new pipeline execution loads a new video).
+                // This is harmless — the new load will start playback on its own.
+                if (error?.name === "AbortError") {
+                    return;
+                }
                 const error_message =
                     error && error.message ? error.message : "Unable to start playback.";
                 set_status(widget_state, `Preview unavailable: ${error_message}`);
