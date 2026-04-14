@@ -64,11 +64,65 @@ function set_status(widget_state, text) {
     }
 }
 
+function update_toggle_button(widget_state) {
+    if (!widget_state?.toggle_button_element) {
+        return;
+    }
+    const is_playing = Boolean(widget_state.is_playing);
+    widget_state.toggle_button_element.textContent = is_playing ? "Pause" : "Play";
+    widget_state.toggle_button_element.setAttribute(
+        "aria-label",
+        is_playing ? "Pause video preview" : "Play video preview",
+    );
+    widget_state.toggle_button_element.setAttribute("aria-pressed", is_playing ? "true" : "false");
+}
+
+function set_playback_state(widget_state, should_play) {
+    if (!widget_state || widget_state.stopped) {
+        return;
+    }
+
+    widget_state.is_playing = Boolean(should_play);
+    update_toggle_button(widget_state);
+
+    if (!widget_state.is_playing) {
+        if (
+            widget_state.animation_handle !== null &&
+            typeof widget_state.cancel_animation_frame === "function"
+        ) {
+            widget_state.cancel_animation_frame(widget_state.animation_handle);
+        }
+        widget_state.animation_handle = null;
+        if (typeof widget_state.video_element?.pause === "function") {
+            widget_state.video_element.pause();
+        }
+        return;
+    }
+
+    if (
+        widget_state.video_element &&
+        String(widget_state.video_element.src ?? "").trim().length > 0 &&
+        typeof widget_state.video_element.play === "function"
+    ) {
+        const play_result = widget_state.video_element.play();
+        if (play_result && typeof play_result.then === "function") {
+            play_result.catch((error) => {
+                const error_message =
+                    error && error.message ? error.message : "Unable to start playback.";
+                set_status(widget_state, `Preview unavailable: ${error_message}`);
+            });
+        }
+    }
+
+    start_video_preview_loop(widget_state);
+}
+
 function stop_video_preview(widget_state) {
     if (!widget_state || widget_state.stopped) {
         return;
     }
     widget_state.stopped = true;
+    widget_state.is_playing = false;
 
     if (
         widget_state.animation_handle !== null &&
@@ -90,8 +144,16 @@ function stop_video_preview(widget_state) {
 }
 
 function start_video_preview_loop(widget_state) {
+    if (!widget_state || widget_state.stopped || !widget_state.is_playing) {
+        return;
+    }
+    if (widget_state.animation_handle !== null) {
+        return;
+    }
+
     const render = () => {
-        if (widget_state.stopped) {
+        if (widget_state.stopped || !widget_state.is_playing) {
+            widget_state.animation_handle = null;
             return;
         }
 
@@ -141,22 +203,28 @@ function apply_video_entry(widget_state, video_entry) {
         }
     }
 
+    if (!widget_state.is_playing) {
+        set_status(widget_state, "Ready. Press Play to preview.");
+        return true;
+    }
+
     set_status(widget_state, "Rendering video preview...");
-    if (typeof widget_state.video_element.play === "function") {
-        const play_result = widget_state.video_element.play();
-        if (play_result && typeof play_result.then === "function") {
-            play_result
-                .then(() => {
-                    set_status(widget_state, "");
-                })
-                .catch((error) => {
-                    const error_message =
-                        error && error.message ? error.message : "Unable to autoplay preview.";
-                    set_status(widget_state, `Preview unavailable: ${error_message}`);
-                });
-        } else {
-            set_status(widget_state, "");
-        }
+    if (typeof widget_state.video_element.play !== "function") {
+        set_status(widget_state, "");
+        return true;
+    }
+
+    const play_result = widget_state.video_element.play();
+    if (play_result && typeof play_result.then === "function") {
+        play_result
+            .then(() => {
+                set_status(widget_state, "");
+            })
+            .catch((error) => {
+                const error_message =
+                    error && error.message ? error.message : "Unable to autoplay preview.";
+                set_status(widget_state, `Preview unavailable: ${error_message}`);
+            });
     } else {
         set_status(widget_state, "");
     }
@@ -252,12 +320,35 @@ export function mount_video_player_widget_for_node({
     Object.assign(canvas_element.style, {
         width: "100%",
         height: "auto",
-        borderRadius: "6px",
+        borderRadius: "10px",
         background: "rgb(20, 24, 32)",
         aspectRatio: "16 / 9",
         display: "block",
+        outline: "1px solid rgb(45, 53, 71)",
     });
     container_element.appendChild(canvas_element);
+
+    const controls_element = document_ref.createElement("div");
+    Object.assign(controls_element.style, {
+        display: "flex",
+        justifyContent: "flex-start",
+    });
+    container_element.appendChild(controls_element);
+
+    const toggle_button_element = document_ref.createElement("button");
+    toggle_button_element.type = "button";
+    Object.assign(toggle_button_element.style, {
+        border: "1px solid rgb(72, 87, 117)",
+        borderRadius: "999px",
+        background: "rgb(34, 42, 58)",
+        color: "rgb(232, 238, 247)",
+        fontSize: "12px",
+        lineHeight: "1.1",
+        fontWeight: "600",
+        padding: "6px 12px",
+        cursor: "pointer",
+    });
+    controls_element.appendChild(toggle_button_element);
 
     const status_element = document_ref.createElement("div");
     status_element.setAttribute("aria-live", "polite");
@@ -296,16 +387,27 @@ export function mount_video_player_widget_for_node({
         context,
         status_element,
         video_element,
+        toggle_button_element,
         animation_handle: null,
+        is_playing: false,
         stopped: false,
         request_animation_frame: resolved_request_animation_frame,
         cancel_animation_frame: resolved_cancel_animation_frame,
     };
+    update_toggle_button(widget_state);
+    toggle_button_element.addEventListener("click", () => {
+        const next_playing = !widget_state.is_playing;
+        set_playback_state(widget_state, next_playing);
+        if (!next_playing) {
+            set_status(widget_state, "Paused on current frame.");
+        } else if (String(widget_state.video_element.src ?? "").trim().length === 0) {
+            set_status(widget_state, "Run the graph to load a video preview.");
+        }
+    });
     node[STATE_KEY] = widget_state;
     NODE_STATES.set(normalize_node_id(node.id), widget_state);
 
     ensure_executed_listener(api_ref);
-    start_video_preview_loop(widget_state);
     return widget_state;
 }
 

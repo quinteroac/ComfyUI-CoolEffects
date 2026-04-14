@@ -29,6 +29,7 @@ class FakeElement {{
         this.tagName = tagName;
         this.children = [];
         this.attributes = {{}};
+        this.listeners = {{}};
         this.style = {{}};
         this.textContent = "";
         this.width = 320;
@@ -40,6 +41,14 @@ class FakeElement {{
     }}
     setAttribute(name, value) {{
         this.attributes[name] = value;
+    }}
+    addEventListener(name, listener) {{
+        this.listeners[name] = listener;
+    }}
+    click() {{
+        if (typeof this.listeners.click === "function") {{
+            this.listeners.click({{ currentTarget: this }});
+        }}
     }}
 }}
 
@@ -115,28 +124,49 @@ const node = new NodeType();
 await node.onNodeCreated();
 
 const container = node.dom_widgets[0].element;
+const controls = container.children[1];
+const playButton = controls.children[0];
 console.log(JSON.stringify({{
     extensionName: captured_extension.name,
     expectedName: EXTENSION_NAME,
     childTags: container.children.map((child) => child.tagName),
+    buttonText: playButton.textContent,
+    buttonPressed: playButton.attributes["aria-pressed"],
 }}));
 """
     output = _run_node_module(script)
     assert output["extensionName"] == output["expectedName"]
     assert output["childTags"][0] == "canvas"
+    assert output["childTags"][1] == "div"
+    assert output["buttonText"] == "Play"
+    assert output["buttonPressed"] == "false"
 
 
-def test_video_player_widget_draws_video_frames_after_executed_event():
+def test_video_player_widget_play_pause_controls_drive_looping_preview():
     script = f"""
 import {{ register_comfy_extension }} from "{WIDGET_URL}";
 
-const raf_callbacks = [];
+const raf_callbacks = new Map();
+let next_raf_id = 1;
+let cancelled_animation_handles = 0;
+
+function run_next_frame() {{
+    const first = raf_callbacks.entries().next().value;
+    if (!first) {{
+        return false;
+    }}
+    const [handle, callback] = first;
+    raf_callbacks.delete(handle);
+    callback();
+    return true;
+}}
 
 class FakeElement {{
     constructor(tagName) {{
         this.tagName = tagName;
         this.children = [];
         this.attributes = {{}};
+        this.listeners = {{}};
         this.style = {{}};
         this.textContent = "";
         this.width = 320;
@@ -148,6 +178,14 @@ class FakeElement {{
     }}
     setAttribute(name, value) {{
         this.attributes[name] = value;
+    }}
+    addEventListener(name, listener) {{
+        this.listeners[name] = listener;
+    }}
+    click() {{
+        if (typeof this.listeners.click === "function") {{
+            this.listeners.click({{ currentTarget: this }});
+        }}
     }}
 }}
 
@@ -176,12 +214,16 @@ class FakeVideoElement extends FakeElement {{
         this.videoHeight = 0;
         this.src = "";
         this.play_calls = 0;
+        this.pause_calls = 0;
+        this.loop = false;
     }}
     play() {{
         this.play_calls += 1;
         return Promise.resolve();
     }}
-    pause() {{}}
+    pause() {{
+        this.pause_calls += 1;
+    }}
     load() {{}}
 }}
 
@@ -216,10 +258,15 @@ register_comfy_extension(app_ref, {{
     document_ref,
     api_ref,
     request_animation_frame: (callback) => {{
-        raf_callbacks.push(callback);
-        return raf_callbacks.length;
+        const handle = next_raf_id;
+        next_raf_id += 1;
+        raf_callbacks.set(handle, callback);
+        return handle;
     }},
-    cancel_animation_frame: () => {{}},
+    cancel_animation_frame: (handle) => {{
+        cancelled_animation_handles += 1;
+        raf_callbacks.delete(handle);
+    }},
 }});
 
 function NodeType() {{
@@ -246,24 +293,48 @@ listeners.executed({{
 await Promise.resolve();
 
 const state = node.__cool_video_player_widget_state;
+const play_button = state.toggle_button_element;
+
+play_button.click();
+await Promise.resolve();
+const queuedAfterPlay = raf_callbacks.size;
+
 state.video_element.readyState = 3;
 state.video_element.videoWidth = 640;
 state.video_element.videoHeight = 360;
-raf_callbacks.shift()();
+run_next_frame();
+const queuedAfterFirstFrame = raf_callbacks.size;
+
+play_button.click();
+const queuedAfterPause = raf_callbacks.size;
 
 console.log(JSON.stringify({{
     videoSrc: state.video_element.src,
     playCalls: state.video_element.play_calls,
+    pauseCalls: state.video_element.pause_calls,
+    videoLoop: state.video_element.loop,
     drawCalls: state.canvas_element.draw_calls,
     canvasWidth: state.canvas_element.width,
     canvasHeight: state.canvas_element.height,
+    buttonText: state.toggle_button_element.textContent,
+    queuedAfterPlay,
+    queuedAfterFirstFrame,
+    queuedAfterPause,
+    cancelledAnimationHandles: cancelled_animation_handles,
     statusText: state.status_element.textContent,
 }}));
 """
     output = _run_node_module(script)
     assert output["videoSrc"] == "https://example.com/video.mp4"
     assert output["playCalls"] == 1
+    assert output["pauseCalls"] >= 1
+    assert output["videoLoop"] is True
     assert output["drawCalls"] >= 1
     assert output["canvasWidth"] == 640
     assert output["canvasHeight"] == 360
-    assert output["statusText"] == ""
+    assert output["buttonText"] == "Play"
+    assert output["queuedAfterPlay"] == 1
+    assert output["queuedAfterFirstFrame"] == 1
+    assert output["queuedAfterPause"] == 0
+    assert output["cancelledAnimationHandles"] >= 1
+    assert output["statusText"] == "Paused on current frame."
