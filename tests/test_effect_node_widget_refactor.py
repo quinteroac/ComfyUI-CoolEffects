@@ -17,6 +17,7 @@ def test_effect_extensions_use_shared_effect_node_widget_helper():
         "vhs_effect.js",
         "zoom_pulse_effect.js",
         "water_drops_effect.js",
+        "frosted_glass_effect.js",
     ):
         widget_source = (WEB_DIR / widget_file_name).read_text(encoding="utf-8")
         assert 'from "./effect_node_widget.js"' in widget_source
