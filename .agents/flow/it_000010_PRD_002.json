@@ -1,0 +1,124 @@
+{
+  "goals": [
+    "Add a `CoolFrostedGlassEffect` node that outputs `EFFECT_PARAMS` compatible with",
+    "Implement a GLSL fragment shader (`frosted_glass.frag`) that combines a directional",
+    "Expose intuitive parameters (frost intensity, blur radius, condensation uniformity,",
+    "Provide a live WebGL2 preview widget so the user sees the effect in real time."
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Configure Frosted Glass Parameters",
+      "description": "As a ComfyUI workflow author, I want to control how heavily frosted and blurred the glass appears so that I can set anything from a light haze to a fully opaque white frost.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "Node exposes five numeric inputs: `frost_intensity` (FLOAT, 0.0–1.0, default 0.5),"
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "Each widget accepts the full specified range without clamping errors."
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "Node output is typed `EFFECT_PARAMS` and carries"
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Live WebGL2 Preview in Node",
+      "description": "As a ComfyUI workflow author, I want to see the frosted glass distortion animated in the node widget so that I can judge the look without running the full pipeline.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "A canvas widget is mounted inside the `CoolFrostedGlassEffect` node, showing"
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "The preview animates (`u_time` drives subtle noise evolution — frost is not"
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "Changing any parameter widget updates the preview within one animation frame."
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "The canvas uses `frosted_glass.frag` fetched from"
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "Integration with VideoGenerator",
+      "description": "As a ComfyUI workflow author, I want to connect `CoolFrostedGlassEffect` to `CoolVideoGenerator` alongside other effects so that the frosted look is applied consistently across every frame of the output video.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "Connecting `CoolFrostedGlassEffect` to any `effect_params_N` slot of"
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "When chained after `CoolWaterDropsEffect`, the frosted blur is applied over the"
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "`CoolVideoGenerator` does not raise an exception when `effect_name` is"
+        }
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Directional Blur Quality",
+      "description": "As a ComfyUI workflow author, I want the blur to look like light scattered through ground glass, not a simple box blur so that the result is visually convincing even at large blur radii.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-004-AC01",
+          "text": "The blur samples at least 8 offset directions per pixel, with offsets perturbed"
+        },
+        {
+          "id": "US-004-AC02",
+          "text": "At `blur_radius = 0.015` and `frost_intensity = 0.5`, fine detail in a test"
+        },
+        {
+          "id": "US-004-AC03",
+          "text": "At `blur_radius = 0.04` and `frost_intensity = 1.0`, the image is heavily"
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "Create `nodes/frosted_glass_effect.py` with class `CoolFrostedGlassEffect`"
+    },
+    {
+      "id": "FR-2",
+      "description": "Create `shaders/glsl/frosted_glass.frag` with uniforms `uniform sampler2D"
+    },
+    {
+      "id": "FR-3",
+      "description": "The frost pattern must be generated procedurally via a noise or hash function"
+    },
+    {
+      "id": "FR-4",
+      "description": "`tint_temperature` must shift the final colour: negative values add a blue-cold"
+    },
+    {
+      "id": "FR-5",
+      "description": "Create `web/frosted_glass_effect.js` as a ComfyUI extension that mounts a"
+    },
+    {
+      "id": "FR-6",
+      "description": "Register `CoolFrostedGlassEffect` in `__init__.py` under"
+    },
+    {
+      "id": "FR-7",
+      "description": "Add `web/frosted_glass_effect.js` to the extension list in `__init__.py`."
+    },
+    {
+      "id": "FR-8",
+      "description": "All GL resources allocated in the Python rendering path must be released"
+    }
+  ]
+}

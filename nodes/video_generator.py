@@ -247,8 +247,8 @@ class CoolVideoGenerator:
                 "effect_count": ("INT", {"default": 1, "min": 1, "max": 8}),
             },
             "optional": {
-                "effect_params_1": (EFFECT_PARAMS,),
                 "audio": ("AUDIO",),
+                "effect_params_1": (EFFECT_PARAMS,),
             },
         }
 
