@@ -19,3 +19,13 @@
 **Pitfalls Encountered:** Switching from autoplay to manual control required guarding against duplicate animation scheduling and stale frame handles; this was resolved by refusing to start a new render loop when one is already active and cancelling the active handle when pausing.
 
 **Useful Context for Future Agents:** The widget state now includes `toggle_button_element` and `is_playing`; tests use synthetic RAF queues plus a fake button `click()` dispatcher to validate play/pause transitions deterministically without a real browser.
+
+## US-003 — User can download the video from the node widget
+
+**Summary:** Added a `Download` button beside the playback control in the `CoolVideoPlayer` widget, implemented client-side fetch/blob download flow that preserves the source format, and expanded widget tests to verify rendered control state and successful download behavior.
+
+**Key Decisions:** Kept download logic inside widget state (`current_video_entry`, `is_downloading`) so UI state, button disabling, and status messaging remain synchronized; reused the same execution payload (`video_entries`) by extending extracted metadata (`filename`, `format`) and deriving download filenames from payload first, then response MIME type fallback.
+
+**Pitfalls Encountered:** Browser download requires APIs that may be missing in non-browser contexts (`fetch`, `URL.createObjectURL`, clickable anchor); hardening required explicit capability checks and user-facing status messages rather than silent no-ops.
+
+**Useful Context for Future Agents:** Widget mount now accepts injectable `fetch_ref` and `url_ref`, which makes download behavior testable in Node-based unit tests without real browser APIs; the new test pattern validates object URL creation/revocation and download filename preservation in one pass.

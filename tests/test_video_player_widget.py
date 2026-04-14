@@ -126,12 +126,15 @@ await node.onNodeCreated();
 const container = node.dom_widgets[0].element;
 const controls = container.children[1];
 const playButton = controls.children[0];
+const downloadButton = controls.children[1];
 console.log(JSON.stringify({{
     extensionName: captured_extension.name,
     expectedName: EXTENSION_NAME,
     childTags: container.children.map((child) => child.tagName),
     buttonText: playButton.textContent,
     buttonPressed: playButton.attributes["aria-pressed"],
+    downloadButtonText: downloadButton.textContent,
+    downloadButtonDisabled: downloadButton.disabled,
 }}));
 """
     output = _run_node_module(script)
@@ -140,6 +143,8 @@ console.log(JSON.stringify({{
     assert output["childTags"][1] == "div"
     assert output["buttonText"] == "Play"
     assert output["buttonPressed"] == "false"
+    assert output["downloadButtonText"] == "Download"
+    assert output["downloadButtonDisabled"] is True
 
 
 def test_video_player_widget_play_pause_controls_drive_looping_preview():
@@ -338,3 +343,206 @@ console.log(JSON.stringify({{
     assert output["queuedAfterPause"] == 0
     assert output["cancelledAnimationHandles"] >= 1
     assert output["statusText"] == "Paused on current frame."
+
+
+def test_video_player_widget_download_button_fetches_video_blob():
+    script = f"""
+import {{ register_comfy_extension }} from "{WIDGET_URL}";
+
+const fake_blob = {{ size: 128, type: "video/webm" }};
+const fetch_calls = [];
+const created_urls = [];
+const revoked_urls = [];
+const clicked_downloads = [];
+let object_url_index = 0;
+
+class FakeElement {{
+    constructor(tagName) {{
+        this.tagName = tagName;
+        this.children = [];
+        this.attributes = {{}};
+        this.listeners = {{}};
+        this.style = {{}};
+        this.textContent = "";
+        this.width = 320;
+        this.height = 180;
+        this.disabled = false;
+    }}
+    appendChild(child) {{
+        this.children.push(child);
+        return child;
+    }}
+    setAttribute(name, value) {{
+        this.attributes[name] = value;
+    }}
+    addEventListener(name, listener) {{
+        this.listeners[name] = listener;
+    }}
+    click() {{
+        if (typeof this.listeners.click === "function") {{
+            this.listeners.click({{ currentTarget: this }});
+        }}
+    }}
+}}
+
+class FakeAnchorElement extends FakeElement {{
+    constructor() {{
+        super("a");
+        this.href = "";
+        this.download = "";
+        this.rel = "";
+    }}
+    click() {{
+        clicked_downloads.push({{
+            href: this.href,
+            download: this.download,
+            rel: this.rel,
+        }});
+    }}
+}}
+
+class FakeCanvasElement extends FakeElement {{
+    constructor() {{
+        super("canvas");
+    }}
+    getContext(kind) {{
+        if (kind !== "2d") {{
+            return null;
+        }}
+        return {{ drawImage() {{}} }};
+    }}
+}}
+
+class FakeVideoElement extends FakeElement {{
+    constructor() {{
+        super("video");
+        this.readyState = 0;
+        this.videoWidth = 0;
+        this.videoHeight = 0;
+        this.src = "";
+        this.loop = false;
+    }}
+    play() {{
+        return Promise.resolve();
+    }}
+    pause() {{}}
+    load() {{}}
+}}
+
+const document_ref = {{
+    createElement(tagName) {{
+        if (tagName === "canvas") {{
+            return new FakeCanvasElement();
+        }}
+        if (tagName === "video") {{
+            return new FakeVideoElement();
+        }}
+        if (tagName === "a") {{
+            return new FakeAnchorElement();
+        }}
+        return new FakeElement(tagName);
+    }},
+}};
+
+const listeners = {{}};
+const api_ref = {{
+    addEventListener(name, listener) {{
+        listeners[name] = listener;
+    }},
+    removeEventListener() {{}},
+}};
+let captured_extension = null;
+const app_ref = {{
+    api: api_ref,
+    registerExtension(extension) {{
+        captured_extension = extension;
+    }},
+}};
+
+register_comfy_extension(app_ref, {{
+    document_ref,
+    api_ref,
+    request_animation_frame: () => 1,
+    cancel_animation_frame: () => {{}},
+    fetch_ref: async (url) => {{
+        fetch_calls.push(url);
+        return {{
+            ok: true,
+            status: 200,
+            headers: {{
+                get(name) {{
+                    if (name.toLowerCase() === "content-type") {{
+                        return "video/webm";
+                    }}
+                    return null;
+                }},
+            }},
+            blob: async () => fake_blob,
+        }};
+    }},
+    url_ref: {{
+        createObjectURL(blob) {{
+            created_urls.push(blob);
+            object_url_index += 1;
+            return `blob:cool-effects-${{object_url_index}}`;
+        }},
+        revokeObjectURL(url) {{
+            revoked_urls.push(url);
+        }},
+    }},
+}});
+
+function NodeType() {{
+    this.id = 88;
+    this.dom_widgets = [];
+}}
+NodeType.prototype.addDOMWidget = function addDOMWidget(_name, _type, element) {{
+    this.dom_widgets.push({{ element }});
+    return {{ element }};
+}};
+
+await captured_extension.beforeRegisterNodeDef(NodeType, {{ name: "CoolVideoPlayer" }});
+const node = new NodeType();
+await node.onNodeCreated();
+
+listeners.executed({{
+    detail: {{
+        node: 88,
+        output: {{
+            video_entries: [{{
+                source_url: "https://example.com/generated-video",
+                filename: "my render",
+                format: "video/webm",
+            }}],
+        }},
+    }},
+}});
+await Promise.resolve();
+
+const state = node.__cool_video_player_widget_state;
+state.download_button_element.click();
+await Promise.resolve();
+await Promise.resolve();
+
+console.log(JSON.stringify({{
+    fetchCalls: fetch_calls,
+    createdUrlsCount: created_urls.length,
+    revokedUrls: revoked_urls,
+    downloadClicks: clicked_downloads,
+    statusText: state.status_element.textContent,
+    buttonDisabled: state.download_button_element.disabled,
+}}));
+"""
+    output = _run_node_module(script)
+    assert output["fetchCalls"] == ["https://example.com/generated-video"]
+    assert output["createdUrlsCount"] == 1
+    assert output["revokedUrls"] == ["blob:cool-effects-1"]
+    assert output["downloadClicks"] == [
+        {
+            "href": "blob:cool-effects-1",
+            "download": "my render.webm",
+            "rel": "noopener",
+        }
+    ]
+    assert output["statusText"] == "Downloaded my render.webm"
+    assert output["buttonDisabled"] is False

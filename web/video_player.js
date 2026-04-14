@@ -40,18 +40,30 @@ function extract_video_entry(output_payload) {
         const entries = Array.isArray(candidate) ? candidate : [candidate];
         for (const entry of entries) {
             if (typeof entry === "string" && entry.trim().length > 0) {
-                return { source_url: entry.trim() };
+                return {
+                    source_url: entry.trim(),
+                    filename: "",
+                    format: "",
+                };
             }
             if (!entry || typeof entry !== "object") {
                 continue;
             }
             const source_url = String(entry.source_url ?? entry.url ?? "").trim();
             if (source_url.length > 0) {
-                return { source_url };
+                return {
+                    source_url,
+                    filename: String(entry.filename ?? "").trim(),
+                    format: String(entry.format ?? "").trim(),
+                };
             }
             const fallback_url = build_view_url(entry);
             if (fallback_url.length > 0) {
-                return { source_url: fallback_url };
+                return {
+                    source_url: fallback_url,
+                    filename: String(entry.filename ?? "").trim(),
+                    format: String(entry.format ?? "").trim(),
+                };
             }
         }
     }
@@ -62,6 +74,69 @@ function set_status(widget_state, text) {
     if (widget_state?.status_element) {
         widget_state.status_element.textContent = text;
     }
+}
+
+function sanitize_download_name(value) {
+    return String(value ?? "")
+        .trim()
+        .replace(/[<>:"/\\|?*\x00-\x1F]/g, "_")
+        .replace(/\s+/g, " ");
+}
+
+function extension_from_mime(mime_type) {
+    const normalized = String(mime_type ?? "")
+        .toLowerCase()
+        .split(";")[0]
+        .trim();
+    const extension_map = {
+        "video/mp4": "mp4",
+        "video/webm": "webm",
+        "video/ogg": "ogv",
+        "video/quicktime": "mov",
+        "video/x-matroska": "mkv",
+    };
+    return extension_map[normalized] ?? "";
+}
+
+function parse_extension_from_value(value) {
+    const clean_value = String(value ?? "").trim();
+    if (clean_value.length === 0) {
+        return "";
+    }
+
+    const without_query = clean_value.split("#")[0].split("?")[0];
+    const segment = without_query.split("/").pop() ?? "";
+    const dot_index = segment.lastIndexOf(".");
+    if (dot_index <= 0 || dot_index === segment.length - 1) {
+        return "";
+    }
+    return segment.slice(dot_index + 1).toLowerCase();
+}
+
+function build_download_filename(video_entry, fallback_extension) {
+    const explicit_name = sanitize_download_name(video_entry?.filename);
+    const entry_extension = parse_extension_from_value(explicit_name);
+    const source_extension = parse_extension_from_value(video_entry?.source_url);
+    const format_extension = extension_from_mime(video_entry?.format);
+    const fallback = parse_extension_from_value(fallback_extension);
+    const selected_extension = entry_extension || source_extension || format_extension || fallback || "mp4";
+
+    if (explicit_name.length > 0) {
+        if (entry_extension.length > 0) {
+            return explicit_name;
+        }
+        return `${explicit_name}.${selected_extension}`;
+    }
+    return `cool-effects-preview.${selected_extension}`;
+}
+
+function set_download_button_state(widget_state, disabled) {
+    if (!widget_state?.download_button_element) {
+        return;
+    }
+    widget_state.download_button_element.disabled = Boolean(disabled);
+    widget_state.download_button_element.style.opacity = disabled ? "0.6" : "1";
+    widget_state.download_button_element.style.cursor = disabled ? "not-allowed" : "pointer";
 }
 
 function update_toggle_button(widget_state) {
@@ -186,15 +261,22 @@ function start_video_preview_loop(widget_state) {
 
 function apply_video_entry(widget_state, video_entry) {
     if (!video_entry || !video_entry.source_url) {
+        widget_state.current_video_entry = null;
+        set_download_button_state(widget_state, true);
         set_status(widget_state, "No video preview data available.");
         return false;
     }
 
     const source_url = String(video_entry.source_url).trim();
     if (source_url.length === 0) {
+        widget_state.current_video_entry = null;
+        set_download_button_state(widget_state, true);
         set_status(widget_state, "No video preview data available.");
         return false;
     }
+
+    widget_state.current_video_entry = video_entry;
+    set_download_button_state(widget_state, false);
 
     if (widget_state.video_element.src !== source_url) {
         widget_state.video_element.src = source_url;
@@ -230,6 +312,76 @@ function apply_video_entry(widget_state, video_entry) {
     }
 
     return true;
+}
+
+async function handle_download_click(widget_state) {
+    if (!widget_state || widget_state.stopped) {
+        return;
+    }
+    if (widget_state.is_downloading) {
+        return;
+    }
+
+    const video_entry = widget_state.current_video_entry;
+    const source_url = String(video_entry?.source_url ?? "").trim();
+    if (source_url.length === 0) {
+        set_status(widget_state, "Run the graph to load a video before downloading.");
+        return;
+    }
+    if (typeof widget_state.fetch_ref !== "function") {
+        set_status(widget_state, "Download is unavailable in this browser.");
+        return;
+    }
+    if (!widget_state.url_ref || typeof widget_state.url_ref.createObjectURL !== "function") {
+        set_status(widget_state, "Download is unavailable in this browser.");
+        return;
+    }
+
+    widget_state.is_downloading = true;
+    set_download_button_state(widget_state, true);
+    const previous_status = widget_state.status_element?.textContent ?? "";
+    set_status(widget_state, "Preparing download...");
+
+    let object_url = null;
+    try {
+        const response = await widget_state.fetch_ref(source_url);
+        if (!response || !response.ok) {
+            throw new Error(`Request failed (${response?.status ?? "unknown"})`);
+        }
+
+        const blob = await response.blob();
+        const response_extension = extension_from_mime(response.headers?.get?.("content-type"));
+        const filename = build_download_filename(video_entry, response_extension);
+        object_url = widget_state.url_ref.createObjectURL(blob);
+
+        const anchor = widget_state.document_ref.createElement("a");
+        anchor.href = object_url;
+        anchor.download = filename;
+        anchor.rel = "noopener";
+        if (typeof anchor.click === "function") {
+            anchor.click();
+        } else {
+            throw new Error("Browser did not expose an anchor click handler.");
+        }
+
+        set_status(widget_state, `Downloaded ${filename}`);
+    } catch (error) {
+        const error_message = error && error.message ? error.message : "Unable to download video.";
+        set_status(widget_state, `Download failed: ${error_message}`);
+    } finally {
+        if (object_url && typeof widget_state.url_ref.revokeObjectURL === "function") {
+            widget_state.url_ref.revokeObjectURL(object_url);
+        }
+        widget_state.is_downloading = false;
+        set_download_button_state(widget_state, !widget_state.current_video_entry);
+        if (
+            widget_state.current_video_entry &&
+            previous_status &&
+            String(widget_state.status_element?.textContent ?? "").startsWith("Preparing download")
+        ) {
+            set_status(widget_state, previous_status);
+        }
+    }
 }
 
 function ensure_executed_listener(api_ref) {
@@ -279,6 +431,8 @@ export function mount_video_player_widget_for_node({
     request_animation_frame = globalThis.requestAnimationFrame,
     cancel_animation_frame = globalThis.cancelAnimationFrame,
     api_ref = globalThis.app?.api ?? null,
+    fetch_ref = globalThis.fetch,
+    url_ref = globalThis.URL,
 } = {}) {
     if (!node || typeof node.addDOMWidget !== "function") {
         return null;
@@ -332,6 +486,8 @@ export function mount_video_player_widget_for_node({
     Object.assign(controls_element.style, {
         display: "flex",
         justifyContent: "flex-start",
+        gap: "8px",
+        flexWrap: "wrap",
     });
     container_element.appendChild(controls_element);
 
@@ -349,6 +505,23 @@ export function mount_video_player_widget_for_node({
         cursor: "pointer",
     });
     controls_element.appendChild(toggle_button_element);
+
+    const download_button_element = document_ref.createElement("button");
+    download_button_element.type = "button";
+    download_button_element.textContent = "Download";
+    download_button_element.setAttribute("aria-label", "Download generated video");
+    Object.assign(download_button_element.style, {
+        border: "1px solid rgb(72, 87, 117)",
+        borderRadius: "999px",
+        background: "rgb(28, 54, 90)",
+        color: "rgb(232, 238, 247)",
+        fontSize: "12px",
+        lineHeight: "1.1",
+        fontWeight: "600",
+        padding: "6px 12px",
+        cursor: "pointer",
+    });
+    controls_element.appendChild(download_button_element);
 
     const status_element = document_ref.createElement("div");
     status_element.setAttribute("aria-live", "polite");
@@ -388,13 +561,20 @@ export function mount_video_player_widget_for_node({
         status_element,
         video_element,
         toggle_button_element,
+        download_button_element,
         animation_handle: null,
         is_playing: false,
+        is_downloading: false,
         stopped: false,
+        current_video_entry: null,
         request_animation_frame: resolved_request_animation_frame,
         cancel_animation_frame: resolved_cancel_animation_frame,
+        fetch_ref,
+        url_ref,
+        document_ref,
     };
     update_toggle_button(widget_state);
+    set_download_button_state(widget_state, true);
     toggle_button_element.addEventListener("click", () => {
         const next_playing = !widget_state.is_playing;
         set_playback_state(widget_state, next_playing);
@@ -403,6 +583,9 @@ export function mount_video_player_widget_for_node({
         } else if (String(widget_state.video_element.src ?? "").trim().length === 0) {
             set_status(widget_state, "Run the graph to load a video preview.");
         }
+    });
+    download_button_element.addEventListener("click", () => {
+        void handle_download_click(widget_state);
     });
     node[STATE_KEY] = widget_state;
     NODE_STATES.set(normalize_node_id(node.id), widget_state);
@@ -427,6 +610,8 @@ export function register_comfy_extension(
         request_animation_frame = globalThis.requestAnimationFrame,
         cancel_animation_frame = globalThis.cancelAnimationFrame,
         api_ref = app_ref?.api ?? null,
+        fetch_ref = globalThis.fetch,
+        url_ref = globalThis.URL,
     } = {},
 ) {
     if (!app_ref || typeof app_ref.registerExtension !== "function") {
@@ -453,6 +638,8 @@ export function register_comfy_extension(
                     request_animation_frame,
                     cancel_animation_frame,
                     api_ref,
+                    fetch_ref,
+                    url_ref,
                 });
             };
 
