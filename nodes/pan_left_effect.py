@@ -32,6 +32,10 @@ class CoolPanLeftEffect:
                     "FLOAT",
                     {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01},
                 ),
+                "zoom": (
+                    "FLOAT",
+                    {"default": 0.0, "min": -0.9, "max": 5.0, "step": 0.05},
+                ),
             }
         }
 
@@ -40,10 +44,10 @@ class CoolPanLeftEffect:
     FUNCTION = "execute"
     CATEGORY = "CoolEffects"
 
-    def execute(self, speed, origin_x, origin_y):
+    def execute(self, speed, origin_x, origin_y, zoom):
         return (
             build_effect_params(
                 "pan_left",
-                {"u_speed": speed, "u_origin_x": origin_x, "u_origin_y": origin_y},
+                {"u_speed": speed, "u_origin_x": origin_x, "u_origin_y": origin_y, "u_zoom": zoom},
             ),
         )

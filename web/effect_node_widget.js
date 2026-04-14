@@ -19,6 +19,38 @@ const EFFECT_DEFAULT_UNIFORMS = Object.freeze({
         u_pulse_amp: 0.06,
         u_pulse_speed: 3.0,
     }),
+    pan_left: Object.freeze({
+        u_speed: 0.2,
+        u_origin_x: 0.0,
+        u_origin_y: 0.0,
+        u_zoom: 0.0,
+    }),
+    pan_right: Object.freeze({
+        u_speed: 0.2,
+        u_origin_x: 0.0,
+        u_origin_y: 0.0,
+        u_zoom: 0.0,
+    }),
+    pan_up: Object.freeze({
+        u_speed: 0.2,
+        u_origin_x: 0.0,
+        u_origin_y: 0.0,
+        u_zoom: 0.0,
+    }),
+    pan_down: Object.freeze({
+        u_speed: 0.2,
+        u_origin_x: 0.0,
+        u_origin_y: 0.0,
+        u_zoom: 0.0,
+    }),
+    pan_diagonal: Object.freeze({
+        u_speed: 0.2,
+        u_origin_x: 0.0,
+        u_origin_y: 0.0,
+        u_dir_x: 0.7071,
+        u_dir_y: 0.7071,
+        u_zoom: 0.0,
+    }),
 });
 
 function default_now() {

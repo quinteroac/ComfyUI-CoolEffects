@@ -40,6 +40,10 @@ class CoolPanDiagonalEffect:
                     "FLOAT",
                     {"default": 0.7071, "min": -1.0, "max": 1.0, "step": 0.01},
                 ),
+                "zoom": (
+                    "FLOAT",
+                    {"default": 0.0, "min": -0.9, "max": 5.0, "step": 0.05},
+                ),
             }
         }
 
@@ -48,7 +52,7 @@ class CoolPanDiagonalEffect:
     FUNCTION = "execute"
     CATEGORY = "CoolEffects"
 
-    def execute(self, speed, origin_x, origin_y, dir_x, dir_y):
+    def execute(self, speed, origin_x, origin_y, dir_x, dir_y, zoom):
         return (
             build_effect_params(
                 "pan_diagonal",
@@ -58,6 +62,7 @@ class CoolPanDiagonalEffect:
                     "u_origin_y": origin_y,
                     "u_dir_x": dir_x,
                     "u_dir_y": dir_y,
+                    "u_zoom": zoom,
                 },
             ),
         )

@@ -8,12 +8,15 @@ uniform float u_origin_x;
 uniform float u_origin_y;
 uniform float u_dir_x;
 uniform float u_dir_y;
+uniform float u_zoom;
 
 out vec4 fragColor;
 
 void main() {
     vec2 uv = gl_FragCoord.xy / u_resolution;
-    vec2 origin_uv = uv + vec2(u_origin_x, u_origin_y);
+    float zoom_scale = max(1.0 + u_zoom, 0.001);
+    vec2 zoomed_uv = (uv - 0.5) / zoom_scale + 0.5;
+    vec2 origin_uv = zoomed_uv + vec2(u_origin_x, u_origin_y);
     vec2 scroll_offset = u_speed * u_time * vec2(u_dir_x, u_dir_y);
     vec2 wrapped_uv = fract(origin_uv + scroll_offset);
     vec3 color = texture(u_image, wrapped_uv).rgb;
