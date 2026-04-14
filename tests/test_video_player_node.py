@@ -45,7 +45,7 @@ def test_video_player_execute_signature_and_ui_payload():
         "video",
     ]
     assert result["result"] == ()
-    assert result["ui"]["video_entries"] == [
+    expected_entries = [
         {
             "source_url": "/view?filename=preview.mp4&type=temp&subfolder=cool",
             "filename": "preview.mp4",
@@ -54,6 +54,52 @@ def test_video_player_execute_signature_and_ui_payload():
             "format": "video/mp4",
         }
     ]
+    assert result["video"] == expected_entries
+    assert result["ui"]["video"] == expected_entries
+    assert result["ui"]["video_entries"] == expected_entries
+
+
+def test_video_player_execute_normalizes_attribute_based_video_entries():
+    module = _load_module(NODE_PATH)
+    node = module.CoolVideoPlayer()
+
+    class FakeSavedVideo:
+        filename = "clip.webm"
+        subfolder = "temp"
+        type = "output"
+        format = "video/webm"
+
+    result = node.execute(FakeSavedVideo())
+
+    assert result["video"] == [
+        {
+            "source_url": "/view?filename=clip.webm&type=output&subfolder=temp",
+            "filename": "clip.webm",
+            "type": "output",
+            "subfolder": "temp",
+            "format": "video/webm",
+        }
+    ]
+
+
+def test_video_player_execute_materializes_in_memory_video_objects():
+    module = _load_module(NODE_PATH)
+    node = module.CoolVideoPlayer()
+
+    class FakeRuntimeVideo:
+        def get_dimensions(self):
+            return (640, 360)
+
+        def save_to(self, path):
+            Path(path).write_bytes(b"fake mp4 data")
+
+    result = node.execute(FakeRuntimeVideo())
+    preview = result["video"][0]
+
+    assert preview["filename"].endswith(".mp4")
+    assert preview["type"] == "temp"
+    assert preview["format"] == "video/mp4"
+    assert preview["source_url"].startswith("/view?filename=")
 
 
 def test_package_registers_cool_video_player_node():
