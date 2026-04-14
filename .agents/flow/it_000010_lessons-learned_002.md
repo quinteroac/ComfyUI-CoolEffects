@@ -19,3 +19,13 @@
 **Pitfalls Encountered:** The acceptance-criteria text in injected context was truncated, so the full PRD artifact was used to confirm AC wording (especially animation and shader-fetch requirements). Also avoided committing generated `__pycache__` artifacts from local test runs.
 
 **Useful Context for Future Agents:** Widget tests run via Node-based module execution in pytest (`node --input-type=module -e ...`) and can directly assert `shader_loader` call names, `u_time` animation progression, and uniform updates from `onWidgetChanged`, which is the fastest way to validate ComfyUI extension behavior without a browser harness.
+
+## US-003 — Integration with VideoGenerator
+
+**Summary:** Added integration-focused `CoolVideoGenerator` tests for `frosted_glass` to verify single-slot execution, any-slot wiring (`effect_params_1`, `effect_params_3`, `effect_params_8`), and ordered composition when chained after `water_drops`.
+
+**Key Decisions:** Reused the existing fake ModernGL harness in `tests/test_video_generator_node.py` instead of adding new test infrastructure, and mirrored established water-drops integration patterns so frosted-glass coverage stays consistent with existing effect behavior checks.
+
+**Pitfalls Encountered:** The injected acceptance criteria were truncated, so the full PRD file was referenced to confirm complete AC wording before implementing tests.
+
+**Useful Context for Future Agents:** The fake framebuffer returns deterministic per-pass bytes (`bytes([frame_index])`), which makes composition-order assertions reliable by checking second-pass texture uploads; this is the quickest way to validate effect chaining without GPU-dependent rendering snapshots.
