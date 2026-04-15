@@ -60,6 +60,16 @@ def _changed_pixels(output_images, input_images):
     return (diff > 0.001).nonzero(as_tuple=False)
 
 
+def _color_mask(frame, min_r, min_g, max_b, max_g=1.0, max_r=1.0):
+    return (
+        (frame[..., 0] >= min_r)
+        & (frame[..., 0] <= max_r)
+        & (frame[..., 1] >= min_g)
+        & (frame[..., 1] <= max_g)
+        & (frame[..., 2] <= max_b)
+    )
+
+
 def test_text_overlay_input_types_expose_required_controls():
     module = _load_module(NODE_PATH)
     input_types = module.CoolTextOverlay.INPUT_TYPES()
@@ -139,6 +149,63 @@ def test_text_overlay_text_widget_is_used_when_fragments_are_empty(monkeypatch):
 
     changed = _changed_pixels(output_video.images, input_images)
     assert changed.numel() > 0
+
+
+def test_text_overlay_invalid_fragments_json_raises_value_error(monkeypatch):
+    module = _load_module(NODE_PATH)
+    _mock_comfy_api(monkeypatch)
+    monkeypatch.setattr(module, "_load_font_for_style", lambda *_args: ImageFont.load_default())
+    node = module.CoolTextOverlay()
+
+    source_video = _FakeVideo(torch.zeros((1, 24, 40, 3), dtype=torch.float32))
+    with pytest.raises(ValueError, match="fragments must be valid JSON"):
+        node.execute(
+            video=source_video,
+            text="HELLO",
+            font_family="arial",
+            font_size=48,
+            color="#ffffff",
+            font_weight="normal",
+            pos_x=0.5,
+            pos_y=0.1,
+            align="center",
+            opacity=1.0,
+            fragments="{not-valid-json",
+        )
+
+
+def test_text_overlay_fragment_defaults_fallback_to_node_style(monkeypatch):
+    module = _load_module(NODE_PATH)
+    recorded_styles = []
+
+    def _recording_font_loader(font_family, font_size, font_weight):
+        recorded_styles.append((font_family, int(font_size), font_weight))
+        return ImageFont.load_default()
+
+    monkeypatch.setattr(module, "_load_font_for_style", _recording_font_loader)
+    fragments = module._normalize_fragments(
+        parsed_fragments=[
+            {"text": "normal"},
+            {
+                "text": "highlight",
+                "font_family": "mono",
+                "font_size": 30,
+                "font_weight": "bold",
+                "color": "#ffff00",
+            },
+        ],
+        default_font_family="arial",
+        default_font_size=48,
+        default_color="#ffffff",
+        default_font_weight="normal",
+    )
+
+    assert len(fragments) == 2
+    assert fragments[0]["text"] == "normal"
+    assert fragments[0]["color"] == (255, 255, 255)
+    assert fragments[1]["color"] == (255, 255, 0)
+    assert recorded_styles[0] == ("arial", 48, "normal")
+    assert recorded_styles[1] == ("mono", 30, "bold")
 
 
 def test_text_overlay_pos_x_and_pos_y_move_overlay_anchor(monkeypatch):
@@ -298,6 +365,89 @@ def test_text_overlay_renders_text_on_all_frames_for_three_frame_video(monkeypat
         centroid_y = float(changed[:, 0].float().mean())
         assert abs(centroid_x - (0.5 * 100.0)) < 20.0
         assert abs(centroid_y - (0.3 * 60.0)) < 20.0
+
+
+def test_text_overlay_fragments_layout_left_to_right_and_align_as_one_line(monkeypatch):
+    module = _load_module(NODE_PATH)
+    _mock_comfy_api(monkeypatch)
+    monkeypatch.setattr(module, "_load_font_for_style", lambda *_args: ImageFont.load_default())
+    node = module.CoolTextOverlay()
+    source_video = _FakeVideo(torch.zeros((1, 80, 220, 3), dtype=torch.float32))
+    fragments = (
+        '[{"text":"HELLO","color":"#ff0000"},'
+        '{"text":"WORLD","color":"#00ff00"}]'
+    )
+
+    left_video, = node.execute(
+        video=source_video,
+        text="ignored",
+        font_family="arial",
+        font_size=48,
+        color="#ffffff",
+        font_weight="normal",
+        pos_x=0.5,
+        pos_y=0.5,
+        align="left",
+        opacity=1.0,
+        fragments=fragments,
+    )
+    right_video, = node.execute(
+        video=source_video,
+        text="ignored",
+        font_family="arial",
+        font_size=48,
+        color="#ffffff",
+        font_weight="normal",
+        pos_x=0.5,
+        pos_y=0.5,
+        align="right",
+        opacity=1.0,
+        fragments=fragments,
+    )
+
+    left_x = float(_changed_pixels(left_video.images, source_video.images)[:, 2].float().mean())
+    right_x = float(_changed_pixels(right_video.images, source_video.images)[:, 2].float().mean())
+    assert left_x > right_x
+
+    left_frame = left_video.images[0]
+    red_mask = _color_mask(left_frame, min_r=0.35, min_g=0.0, max_b=0.2, max_g=0.2)
+    green_mask = _color_mask(left_frame, min_r=0.0, min_g=0.35, max_b=0.2, max_g=1.0, max_r=0.2)
+    assert int(red_mask.sum()) > 0
+    assert int(green_mask.sum()) > 0
+    red_x = float(red_mask.nonzero(as_tuple=False)[:, 1].float().mean())
+    green_x = float(green_mask.nonzero(as_tuple=False)[:, 1].float().mean())
+    red_y = float(red_mask.nonzero(as_tuple=False)[:, 0].float().mean())
+    green_y = float(green_mask.nonzero(as_tuple=False)[:, 0].float().mean())
+    assert green_x > red_x
+    assert abs(green_y - red_y) < 6.0
+
+
+def test_text_overlay_fragments_render_respective_colors(monkeypatch):
+    module = _load_module(NODE_PATH)
+    _mock_comfy_api(monkeypatch)
+    monkeypatch.setattr(module, "_load_font_for_style", lambda *_args: ImageFont.load_default())
+    node = module.CoolTextOverlay()
+    source_video = _FakeVideo(torch.zeros((1, 80, 240, 3), dtype=torch.float32))
+
+    output_video, = node.execute(
+        video=source_video,
+        text="ignored",
+        font_family="arial",
+        font_size=48,
+        color="#ffffff",
+        font_weight="normal",
+        pos_x=0.2,
+        pos_y=0.5,
+        align="left",
+        opacity=1.0,
+        fragments='[{"text":"ONE","color":"#ff0000"},{"text":"TWO","color":"#ffff00"}]',
+    )
+
+    frame = output_video.images[0]
+    red_mask = _color_mask(frame, min_r=0.35, min_g=0.0, max_b=0.2, max_g=0.2)
+    yellow_mask = (frame[..., 0] > 0.35) & (frame[..., 1] > 0.35) & (frame[..., 2] < 0.2)
+    assert int(red_mask.sum()) > 0
+    assert int(yellow_mask.sum()) > 0
 
 
 def test_package_registers_cool_text_overlay_node():
