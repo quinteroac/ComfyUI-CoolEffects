@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import numpy as np
 
+WAVEFORM_SAMPLE_COUNT = 256
 
-def _default_feature_frame() -> dict[str, float | bool]:
+
+def _default_feature_frame() -> dict[str, float | bool | list[float]]:
     return {
         "rms": 0.0,
         "beat": False,
         "bass": 0.0,
         "mid": 0.0,
         "treble": 0.0,
+        "waveform": [0.0] * WAVEFORM_SAMPLE_COUNT,
     }
 
 
@@ -158,6 +161,42 @@ def _normalize_per_signal(values: np.ndarray) -> np.ndarray:
     return np.clip(values / max_value, 0.0, 1.0).astype(np.float32, copy=False)
 
 
+def _resample_waveform(segment: np.ndarray, sample_count: int) -> np.ndarray:
+    if segment.size == 0:
+        return np.zeros((sample_count,), dtype=np.float32)
+
+    finite_segment = np.nan_to_num(segment, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32, copy=False)
+    max_abs = float(np.max(np.abs(finite_segment))) if finite_segment.size > 0 else 0.0
+    if max_abs > 0.0:
+        normalized = finite_segment / max_abs
+    else:
+        normalized = finite_segment
+    normalized = np.clip(normalized, -1.0, 1.0)
+
+    if normalized.size == 1:
+        return np.full((sample_count,), float(normalized[0]), dtype=np.float32)
+
+    source_x = np.linspace(0.0, 1.0, normalized.size, dtype=np.float32)
+    target_x = np.linspace(0.0, 1.0, sample_count, dtype=np.float32)
+    resampled = np.interp(target_x, source_x, normalized)
+    return np.clip(resampled, -1.0, 1.0).astype(np.float32, copy=False)
+
+
+def _compute_waveform_per_frame(mono_audio: np.ndarray, frame_count: int, sample_count: int) -> list[list[float]]:
+    frame_edges = np.linspace(0, mono_audio.shape[0], frame_count + 1, dtype=np.int64)
+    waveforms: list[list[float]] = []
+    for index in range(frame_count):
+        start = int(frame_edges[index])
+        end = int(frame_edges[index + 1])
+        if end <= start:
+            waveforms.append([0.0] * sample_count)
+            continue
+        segment = mono_audio[start:end]
+        resampled = _resample_waveform(segment, sample_count)
+        waveforms.append(resampled.tolist())
+    return waveforms
+
+
 def extract_audio_features(audio_tensor, fps, duration) -> list[dict]:
     frame_count = round(float(duration) * float(fps))
     if frame_count < 0:
@@ -181,6 +220,7 @@ def extract_audio_features(audio_tensor, fps, duration) -> list[dict]:
     bass_values = _normalize_per_signal(bass_raw)
     mid_values = _normalize_per_signal(mid_raw)
     treble_values = _normalize_per_signal(treble_raw)
+    waveform_values = _compute_waveform_per_frame(mono_audio, frame_count, WAVEFORM_SAMPLE_COUNT)
 
     features: list[dict] = []
     for index in range(frame_count):
@@ -191,6 +231,7 @@ def extract_audio_features(audio_tensor, fps, duration) -> list[dict]:
                 "bass": float(bass_values[index]),
                 "mid": float(mid_values[index]),
                 "treble": float(treble_values[index]),
+                "waveform": waveform_values[index],
             }
         )
     return features

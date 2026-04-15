@@ -28,7 +28,7 @@ class TestAudioUtils(unittest.TestCase):
         audio[start:end] = 1.0
 
         features = extract_audio_features(audio, fps=fps, duration=duration)
-        expected_keys = {"rms", "beat", "bass", "mid", "treble"}
+        expected_keys = {"rms", "beat", "bass", "mid", "treble", "waveform"}
 
         self.assertEqual(len(features), frame_count)
         self.assertEqual(set(features[0].keys()), expected_keys)
@@ -42,6 +42,12 @@ class TestAudioUtils(unittest.TestCase):
             self.assertIsInstance(feature["bass"], float)
             self.assertIsInstance(feature["mid"], float)
             self.assertIsInstance(feature["treble"], float)
+            self.assertIsInstance(feature["waveform"], list)
+            self.assertEqual(len(feature["waveform"]), 256)
+            for waveform_sample in feature["waveform"]:
+                self.assertIsInstance(waveform_sample, float)
+                self.assertGreaterEqual(waveform_sample, -1.0)
+                self.assertLessEqual(waveform_sample, 1.0)
             self.assertGreaterEqual(feature["bass"], 0.0)
             self.assertLessEqual(feature["bass"], 1.0)
             self.assertGreaterEqual(feature["mid"], 0.0)
@@ -94,6 +100,31 @@ class TestAudioUtils(unittest.TestCase):
         self.assertLess(features[2]["treble"], 0.05)
         self.assertGreater(features[3]["treble"], 0.95)
 
+    def test_extract_audio_features_waveform_uses_interp_and_resamples_to_256(self):
+        fps = 6
+        duration = 1.0
+        frame_count = round(duration * fps)
+        samples_per_frame = 180
+        audio = np.linspace(
+            -0.8,
+            0.8,
+            num=frame_count * samples_per_frame,
+            dtype=np.float32,
+        )
+
+        with mock.patch("nodes.audio_utils.np.interp", wraps=np.interp) as interp_mock:
+            features = extract_audio_features(audio, fps=fps, duration=duration)
+
+        self.assertEqual(len(features), frame_count)
+        self.assertGreaterEqual(interp_mock.call_count, frame_count)
+        for feature in features:
+            waveform = feature["waveform"]
+            self.assertEqual(len(waveform), 256)
+            self.assertGreaterEqual(max(waveform), -1.0)
+            self.assertLessEqual(max(waveform), 1.0)
+            self.assertGreaterEqual(min(waveform), -1.0)
+            self.assertLessEqual(min(waveform), 1.0)
+
     def test_extract_audio_features_handles_none_audio(self):
         fps = 24
         duration = 2.0
@@ -108,6 +139,7 @@ class TestAudioUtils(unittest.TestCase):
                     "bass": 0.0,
                     "mid": 0.0,
                     "treble": 0.0,
+                    "waveform": [0.0] * 256,
                 },
             )
 
