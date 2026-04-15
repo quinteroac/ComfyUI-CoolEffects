@@ -1,6 +1,7 @@
 """ComfyUI dedicated Waveform effect node."""
 
 import importlib.util
+import logging
 from pathlib import Path
 
 
@@ -14,18 +15,43 @@ _effect_params_module = importlib.util.module_from_spec(_EFFECT_PARAMS_SPEC)
 _EFFECT_PARAMS_SPEC.loader.exec_module(_effect_params_module)
 build_effect_params = _effect_params_module.build_effect_params
 
+LOGGER = logging.getLogger(__name__)
+_DEFAULT_LINE_COLOR = (1.0, 0.8, 0.2)
+
 
 def _parse_line_color(line_color: str) -> tuple[float, float, float]:
     if not isinstance(line_color, str):
-        raise ValueError("line_color must be a comma-separated RGB string")
+        LOGGER.warning(
+            "Invalid waveform line_color %r; expected 'r,g,b' floats, using default %s",
+            line_color,
+            _DEFAULT_LINE_COLOR,
+        )
+        return _DEFAULT_LINE_COLOR
+
     parts = [part.strip() for part in line_color.split(",")]
     if len(parts) != 3:
-        raise ValueError("line_color must have exactly three comma-separated values")
+        LOGGER.warning(
+            "Invalid waveform line_color %r; expected exactly three comma-separated floats, using default %s",
+            line_color,
+            _DEFAULT_LINE_COLOR,
+        )
+        return _DEFAULT_LINE_COLOR
+
     try:
         r, g, b = (float(parts[0]), float(parts[1]), float(parts[2]))
-    except ValueError as error:
-        raise ValueError("line_color values must be numeric") from error
-    return (r, g, b)
+    except ValueError:
+        LOGGER.warning(
+            "Invalid waveform line_color %r; values must be numeric floats, using default %s",
+            line_color,
+            _DEFAULT_LINE_COLOR,
+        )
+        return _DEFAULT_LINE_COLOR
+
+    return (
+        max(0.0, min(1.0, r)),
+        max(0.0, min(1.0, g)),
+        max(0.0, min(1.0, b)),
+    )
 
 
 class CoolWaveformEffect:

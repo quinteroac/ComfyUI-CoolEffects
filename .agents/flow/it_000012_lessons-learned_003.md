@@ -19,3 +19,13 @@
 **Pitfalls Encountered:** Existing generator uniform assignment assumed scalar-only values; waveform required vec3 (`u_line_color`) and float-array (`u_waveform[256]`) support, so scalar-only writes had to be generalized without regressing existing effect uniforms.
 
 **Useful Context for Future Agents:** For shader uniform arrays in frontend previews, use `"u_<name>[0]"` with `set_uniform_array`; for backend Moderngl programs, assigning Python lists directly to `program['u_waveform'].value` works when length matches shader array size and values are numeric.
+
+## US-003 — Waveform colour input validation
+
+**Summary:** Hardened waveform `line_color` parsing in `nodes/waveform_effect.py` so malformed values now log warnings and fall back to `(1.0, 0.8, 0.2)` instead of raising, and valid parsed values are clamped per component to `[0.0, 1.0]`.
+
+**Key Decisions:** Kept parsing logic localized to `_parse_line_color`, added module-level `LOGGER` and `_DEFAULT_LINE_COLOR`, and validated behavior through node-level unit tests (`execute`) to match user-facing runtime behavior.
+
+**Pitfalls Encountered:** Prior implementation raised `ValueError` for malformed color strings, which could bubble into ComfyUI execution; switching to warning + fallback required ensuring no exception path remained for bad `line_color` formats.
+
+**Useful Context for Future Agents:** `assertLogs("nodes.waveform_effect", level="WARNING")` is the stable way to assert fallback warnings, and clamping is applied only after successful numeric parsing (fallback default is already in-range).

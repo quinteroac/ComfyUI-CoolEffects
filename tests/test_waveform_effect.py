@@ -44,6 +44,19 @@ class TestWaveformEffectNode(unittest.TestCase):
             },
         )
 
+    def test_execute_falls_back_to_default_color_and_logs_warning(self):
+        node = CoolWaveformEffect()
+        with self.assertLogs("nodes.waveform_effect", level="WARNING") as logs:
+            (effect_params,) = node.execute("oops", 0.01, 0.25, 0.7, 0.9)
+
+        self.assertEqual(effect_params["params"]["u_line_color"], (1.0, 0.8, 0.2))
+        self.assertIn("using default (1.0, 0.8, 0.2)", logs.output[0])
+
+    def test_execute_clamps_line_color_components_to_unit_range(self):
+        node = CoolWaveformEffect()
+        (effect_params,) = node.execute("1.7,-0.5,0.4", 0.01, 0.25, 0.7, 0.9)
+        self.assertEqual(effect_params["params"]["u_line_color"], (1.0, 0.0, 0.4))
+
 
 if __name__ == "__main__":
     unittest.main()
