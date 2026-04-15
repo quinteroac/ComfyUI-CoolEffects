@@ -32,6 +32,16 @@ const FROSTED_GLASS_PARAM_SPECS = Object.freeze([
         uniform_name: "u_condensation_rate",
         default_value: 0.0,
     }),
+    Object.freeze({
+        widget_name: "frost_speed",
+        uniform_name: "u_frost_speed",
+        default_value: 1.0,
+    }),
+    Object.freeze({
+        widget_name: "dew_amount",
+        uniform_name: "u_dew_amount",
+        default_value: 0.3,
+    }),
 ]);
 
 export async function mount_frosted_glass_effect_widget_for_node({

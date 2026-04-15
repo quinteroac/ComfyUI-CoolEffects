@@ -42,6 +42,14 @@ def test_frosted_glass_input_types_expose_all_numeric_controls_with_ranges():
         "FLOAT",
         {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01},
     )
+    assert required_inputs["frost_speed"] == (
+        "FLOAT",
+        {"default": 1.0, "min": 0.0, "max": 5.0, "step": 0.1},
+    )
+    assert required_inputs["dew_amount"] == (
+        "FLOAT",
+        {"default": 0.3, "min": 0.0, "max": 1.0, "step": 0.01},
+    )
 
 
 def test_frosted_glass_node_declares_effect_params_output_contract():
@@ -61,6 +69,8 @@ def test_frosted_glass_execute_returns_frosted_glass_effect_params_bundle():
         uniformity=0.0,
         tint_temperature=-1.0,
         condensation_rate=1.0,
+        frost_speed=2.0,
+        dew_amount=0.5,
     )
 
     assert output == {
@@ -71,6 +81,8 @@ def test_frosted_glass_execute_returns_frosted_glass_effect_params_bundle():
             "u_uniformity": 0.0,
             "u_tint_temperature": -1.0,
             "u_condensation_rate": 1.0,
+            "u_frost_speed": 2.0,
+            "u_dew_amount": 0.5,
         },
     }
 
@@ -85,6 +97,8 @@ def test_frosted_glass_execute_signature_matches_all_controls():
         "uniformity",
         "tint_temperature",
         "condensation_rate",
+        "frost_speed",
+        "dew_amount",
     ]
 
 

@@ -1,92 +1,64 @@
 #version 330
 
+// Based on Shadertoy dist() technique
+// iChannel0 → u_image, iTime → u_time, iResolution → u_resolution
+// iChannel1 (noise texture) → replaced with sin-wave noise from the
+//   commented alternative in the original snippet.
+//
+// Controls:
+//   u_dew_amount       → max distortion strength (0 = no effect)
+//   u_condensation_rate + u_frost_speed → how fast the effect builds up
+//   u_uniformity       → spatial frequency of the distortion pattern
+
 uniform sampler2D u_image;
 uniform float u_time;
 uniform vec2 u_resolution;
-uniform float u_frost_intensity;
-uniform float u_blur_radius;
-uniform float u_uniformity;
-uniform float u_tint_temperature;
-uniform float u_condensation_rate;
+uniform float u_frost_intensity;    // reserved / unused
+uniform float u_blur_radius;        // reserved / unused
+uniform float u_uniformity;         // distortion frequency
+uniform float u_tint_temperature;   // reserved / unused
+uniform float u_condensation_rate;  // speed of build-up
+uniform float u_frost_speed;        // speed multiplier
+uniform float u_dew_amount;         // max displacement strength
 
 out vec4 fragColor;
 
-float hash12(vec2 p) {
-    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-    p3 += dot(p3, p3.yzx + 33.33);
-    return fract((p3.x + p3.y) * p3.z);
+// Sin-wave noise replacing iChannel1 .xy
+// Returns values in [0,1] — same range as a noise texture sample.
+vec2 noise_sample(vec2 uv) {
+    float freq = mix(1.0, 10.0, clamp(u_uniformity, 0.0, 1.0));
+    return vec2(
+        sin(uv.x * freq * 10.0) * 0.5 + sin(uv.x * freq * 3.14 / 2.0) * 0.5,
+        sin(uv.y * freq * 10.0 + 200.0) * 0.5 + sin(uv.y * freq * 3.14 / 2.0 + 20.0) * 0.5
+    ) * 0.5 + 0.5;   // map to [0, 1]
 }
 
-float value_noise(vec2 p) {
-    vec2 i = floor(p);
-    vec2 f = fract(p);
-    f = f * f * (3.0 - 2.0 * f);
-    float a = hash12(i);
-    float b = hash12(i + vec2(1.0, 0.0));
-    float c = hash12(i + vec2(0.0, 1.0));
-    float d = hash12(i + vec2(1.0, 1.0));
-    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+float stepfun(float x) {
+    return (sign(x) + 1.0) / 2.0;
 }
 
-float fbm(vec2 p) {
-    float value = 0.0;
-    float amplitude = 0.6;
-    vec2 q = p;
-    for (int i = 0; i < 4; i++) {
-        value += value_noise(q) * amplitude;
-        q *= 2.0;
-        amplitude *= 0.5;
-    }
-    return value;
+// Returns 1 inside [-1,1]x[-1,1], 0 outside — same as original square()
+float square(vec2 pos) {
+    return (stepfun(pos.x + 1.0) * stepfun(1.0 - pos.x)) *
+           (stepfun(pos.y + 1.0) * stepfun(1.0 - pos.y));
+}
+
+// Exact port of the original dist() — covers the whole image (no circular
+// movement), strength grows from 0 via condensation_rate * frost_speed * time.
+vec2 dist_fn(vec2 pos, float strength) {
+    // Scale so square() returns 1 for the entire image (range stays in [-1,1])
+    vec2 scaled = (pos - 0.5) * 1.8;
+    return pos + square(scaled) * noise_sample(scaled) * strength;
 }
 
 void main() {
     vec2 uv = gl_FragCoord.xy / u_resolution;
-    float uniformity = clamp(u_uniformity, 0.0, 1.0);
-    float frost_intensity = clamp(u_frost_intensity, 0.0, 1.0);
-    float condensation = clamp(
-        frost_intensity + u_condensation_rate * u_time * 0.08,
-        0.0,
-        1.0
-    );
-    float noise_frequency = mix(2.5, 28.0, uniformity);
-    float time_phase = u_time * 0.22;
-    float frost_noise = fbm(uv * noise_frequency + vec2(time_phase * 0.28, -time_phase * 0.21));
 
-    vec3 center_sample = texture(u_image, uv).rgb;
-    vec3 blur_sum = center_sample;
-    float weight_sum = 1.0;
-    float angle_step = 0.78539816339; // 2*PI / 8
-    float base_jitter = (frost_noise - 0.5) * 0.7;
-    float blur_radius = max(0.0, u_blur_radius);
-    vec2 noise_seed = uv * u_resolution * (1.0 + uniformity * 0.75);
+    // Distortion grows from 0 → u_dew_amount * 0.1 over time
+    float grow     = clamp(u_condensation_rate * u_time * u_frost_speed * 0.04, 0.0, 1.0);
+    float strength = clamp(u_dew_amount, 0.0, 1.0) * grow * 0.10;
 
-    for (int i = 0; i < 8; i++) {
-        float angle = float(i) * angle_step;
-        float dir_noise = hash12(noise_seed + vec2(float(i) * 17.0, time_phase * 13.0));
-        float radial_noise = hash12(noise_seed.yx + vec2(float(i) * 11.0, -time_phase * 7.0));
-        float angle_perturb = (dir_noise - 0.5) * 0.55;
-        vec2 direction = vec2(cos(angle + angle_perturb), sin(angle + angle_perturb));
-        float radial_offset = blur_radius * (1.0 + base_jitter * 0.35 + (radial_noise - 0.5) * 0.8);
-        vec2 sample_uv = clamp(uv + direction * max(radial_offset, 0.0), vec2(0.0), vec2(1.0));
-        vec3 sample_color = texture(u_image, sample_uv).rgb;
-        blur_sum += sample_color;
-        weight_sum += 1.0;
-    }
+    vec2 duv = clamp(dist_fn(uv, strength), vec2(0.0), vec2(1.0));
 
-    vec3 blurred = blur_sum / weight_sum;
-    float blur_mix = clamp(frost_intensity * 0.7 + condensation * 0.25, 0.0, 1.0);
-    vec3 softened = mix(center_sample, blurred, blur_mix);
-
-    float patch_mask = smoothstep(0.35, 0.9, frost_noise) * condensation;
-    vec3 cold_tint = vec3(0.9, 0.95, 1.05);
-    vec3 warm_tint = vec3(1.06, 1.0, 0.9);
-    float tint_mix = clamp((u_tint_temperature + 1.0) * 0.5, 0.0, 1.0);
-    vec3 tint = mix(cold_tint, warm_tint, tint_mix);
-    vec3 frosted_color = softened * tint + vec3(0.14) * patch_mask * condensation;
-    float frost_veil = clamp(condensation * (0.2 + frost_intensity * 0.35), 0.0, 0.65);
-    vec3 veiled_color = mix(softened, frosted_color, patch_mask);
-    vec3 final_color = mix(veiled_color, vec3(1.0), frost_veil * patch_mask);
-
-    fragColor = vec4(clamp(final_color, 0.0, 1.0), 1.0);
+    fragColor = vec4(texture(u_image, duv).rgb, 1.0);
 }

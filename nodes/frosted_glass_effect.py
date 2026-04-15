@@ -40,6 +40,14 @@ class CoolFrostedGlassEffect:
                     "FLOAT",
                     {"default": 0.0, "min": 0.0, "max": 1.0, "step": 0.01},
                 ),
+                "frost_speed": (
+                    "FLOAT",
+                    {"default": 1.0, "min": 0.0, "max": 5.0, "step": 0.1},
+                ),
+                "dew_amount": (
+                    "FLOAT",
+                    {"default": 0.3, "min": 0.0, "max": 1.0, "step": 0.01},
+                ),
             }
         }
 
@@ -55,6 +63,8 @@ class CoolFrostedGlassEffect:
         uniformity,
         tint_temperature,
         condensation_rate,
+        frost_speed,
+        dew_amount,
     ):
         return (
             build_effect_params(
@@ -65,6 +75,8 @@ class CoolFrostedGlassEffect:
                     "u_uniformity": uniformity,
                     "u_tint_temperature": tint_temperature,
                     "u_condensation_rate": condensation_rate,
+                    "u_frost_speed": frost_speed,
+                    "u_dew_amount": dew_amount,
                 },
             ),
         )
