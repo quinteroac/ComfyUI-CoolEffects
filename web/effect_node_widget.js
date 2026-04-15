@@ -19,6 +19,11 @@ const EFFECT_DEFAULT_UNIFORMS = Object.freeze({
         u_pulse_amp: 0.06,
         u_pulse_speed: 3.0,
     }),
+    bass_zoom: Object.freeze({
+        u_zoom_strength: 0.3,
+        u_smoothing: 0.5,
+        u_bass: 0.0,
+    }),
     beat_pulse: Object.freeze({
         u_pulse_intensity: 0.5,
         u_zoom_amount: 0.05,
