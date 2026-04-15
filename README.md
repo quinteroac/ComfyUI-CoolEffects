@@ -12,6 +12,7 @@ ComfyUI-CoolEffects is a custom node package for applying GLSL-driven effects to
 - `CoolFrostedGlassEffect`: outputs frosted-glass `EFFECT_PARAMS` from frost intensity/blur/uniformity/tint/condensation controls.
 - `CoolVideoGenerator`: renders shader-driven frame batches from an input image.
 - `CoolVideoPlayer`: accepts a `VIDEO` input and previews decoded frames in an embedded canvas widget.
+- `CoolTextOverlay`: burns text into every frame of a `VIDEO` with controllable style, position, alignment, and opacity.
 
 ## Shader architecture
 
