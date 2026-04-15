@@ -58,6 +58,12 @@ _beat_pulse_effect_module = _load_module_from_path(
 )
 CoolBeatPulseEffect = _beat_pulse_effect_module.CoolBeatPulseEffect
 
+_freq_warp_effect_module = _load_module_from_path(
+    "cool_effects_freq_warp_effect_runtime",
+    PACKAGE_ROOT / "nodes" / "freq_warp_effect.py",
+)
+CoolFreqWarpEffect = _freq_warp_effect_module.CoolFreqWarpEffect
+
 _water_drops_effect_module = _load_module_from_path(
     "cool_effects_water_drops_effect_runtime",
     PACKAGE_ROOT / "nodes" / "water_drops_effect.py",
@@ -126,6 +132,7 @@ NODE_CLASS_MAPPINGS = {
     "CoolZoomPulseEffect": CoolZoomPulseEffect,
     "CoolBassZoomEffect": CoolBassZoomEffect,
     "CoolBeatPulseEffect": CoolBeatPulseEffect,
+    "CoolFreqWarpEffect": CoolFreqWarpEffect,
     "CoolWaterDropsEffect": CoolWaterDropsEffect,
     "CoolFrostedGlassEffect": CoolFrostedGlassEffect,
     "CoolPanLeftEffect": CoolPanLeftEffect,
@@ -142,6 +149,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CoolZoomPulseEffect": "Cool Zoom Pulse Effect",
     "CoolBassZoomEffect": "Cool Bass Zoom Effect",
     "CoolBeatPulseEffect": "Cool Beat Pulse Effect",
+    "CoolFreqWarpEffect": "Cool Freq Warp Effect",
     "CoolWaterDropsEffect": "Cool Water Drops Effect",
     "CoolFrostedGlassEffect": "Cool Frosted Glass Effect",
     "CoolPanLeftEffect": "Cool Pan Left Effect",

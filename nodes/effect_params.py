@@ -29,6 +29,14 @@ DEFAULT_PARAMS: dict[str, dict] = {
         "u_beat": 0.0,
         "u_rms": 0.0,
     },
+    "freq_warp": {
+        "u_warp_intensity": 0.4,
+        "u_warp_frequency": 8.0,
+        "u_mid_weight": 0.6,
+        "u_treble_weight": 0.4,
+        "u_mid": 0.0,
+        "u_treble": 0.0,
+    },
     "water_drops": {
         "u_drop_density": 60,
         "u_drop_size": 0.08,

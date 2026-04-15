@@ -99,12 +99,14 @@ def _extract_effect_name(effect_params: dict) -> str:
     return effect_name
 
 
-def _resolve_audio_feature_frame(audio_features, frame_index: int) -> tuple[float, float, float]:
+def _resolve_audio_feature_frame(
+    audio_features, frame_index: int
+) -> tuple[float, float, float, float, float]:
     if frame_index < 0 or frame_index >= len(audio_features):
-        return 0.0, 0.0, 0.0
+        return 0.0, 0.0, 0.0, 0.0, 0.0
     feature = audio_features[frame_index]
     if not isinstance(feature, dict):
-        return 0.0, 0.0, 0.0
+        return 0.0, 0.0, 0.0, 0.0, 0.0
 
     beat_flag = feature.get("beat", False)
     beat_value = 1.0 if bool(beat_flag) else 0.0
@@ -119,9 +121,21 @@ def _resolve_audio_feature_frame(audio_features, frame_index: int) -> tuple[floa
     except (TypeError, ValueError):
         bass_value = 0.0
 
+    try:
+        mid_value = float(feature.get("mid", 0.0))
+    except (TypeError, ValueError):
+        mid_value = 0.0
+
+    try:
+        treble_value = float(feature.get("treble", 0.0))
+    except (TypeError, ValueError):
+        treble_value = 0.0
+
     rms_value = float(np.clip(rms_value, 0.0, 1.0))
     bass_value = float(np.clip(bass_value, 0.0, 1.0))
-    return beat_value, rms_value, bass_value
+    mid_value = float(np.clip(mid_value, 0.0, 1.0))
+    treble_value = float(np.clip(treble_value, 0.0, 1.0))
+    return beat_value, rms_value, bass_value, mid_value, treble_value
 
 
 def _render_frames(
@@ -185,7 +199,7 @@ def _render_frames(
                     program[uniform_name].value = float(uniform_value)
                 except KeyError:
                     continue
-            beat_value, rms_value, bass_value = _resolve_audio_feature_frame(
+            beat_value, rms_value, bass_value, mid_value, treble_value = _resolve_audio_feature_frame(
                 resolved_audio_features, frame_index
             )
             try:
@@ -198,6 +212,14 @@ def _render_frames(
                 pass
             try:
                 program["u_bass"].value = bass_value
+            except KeyError:
+                pass
+            try:
+                program["u_mid"].value = mid_value
+            except KeyError:
+                pass
+            try:
+                program["u_treble"].value = treble_value
             except KeyError:
                 pass
             program["u_time"].value = frame_index / fps

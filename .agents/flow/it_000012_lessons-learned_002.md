@@ -19,3 +19,13 @@
 **Pitfalls Encountered:** `u_smoothing` needed meaningful shader usage despite stateless fragment execution; resolved by applying smoothing as a nonlinear blend (`mix` + `smoothstep`) over incoming bass energy before computing zoom scale.
 
 **Useful Context for Future Agents:** This repo validates many frontend/shader contracts through source-assertion unittests; for new effects, mirror that strategy to verify uniform contracts and preview-signal behavior without requiring browser runtime tests.
+
+## US-003 — CoolFreqWarpEffect node
+
+**Summary:** Added `CoolFreqWarpEffect` with warp-intensity/frequency and band-weight controls, introduced `freq_warp.frag`, wired node registration in `__init__.py`, added `web/freq_warp_effect.js` with synthetic mid/treble preview signals, and extended `CoolVideoGenerator` to feed `u_mid`/`u_treble` uniforms per frame.
+
+**Key Decisions:** Reused the per-effect architecture used by existing audio-reactive nodes (Python node + GLSL shader + web extension), normalized weighted mid/treble energy in the shader before applying UV warping, and kept generator audio-frame resolution centralized in `_resolve_audio_feature_frame`.
+
+**Pitfalls Encountered:** Expanding `_resolve_audio_feature_frame` to return extra values impacted existing bass-focused tests; those tests needed updates to unpack the new tuple shape without altering their assertions.
+
+**Useful Context for Future Agents:** Keep `effect_params.DEFAULT_PARAMS` and `web/effect_node_widget.js` default-uniform maps in sync for new effects; this avoids preview defaults drifting from backend defaults and reduces widget initialization edge cases.

@@ -31,6 +31,14 @@ const EFFECT_DEFAULT_UNIFORMS = Object.freeze({
         u_beat: 0.0,
         u_rms: 0.0,
     }),
+    freq_warp: Object.freeze({
+        u_warp_intensity: 0.4,
+        u_warp_frequency: 8.0,
+        u_mid_weight: 0.6,
+        u_treble_weight: 0.4,
+        u_mid: 0.0,
+        u_treble: 0.0,
+    }),
     pan_left: Object.freeze({
         u_speed: 0.2,
         u_origin_x: 0.0,
