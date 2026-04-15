@@ -86,6 +86,12 @@ const EFFECT_DEFAULT_UNIFORMS = Object.freeze({
         u_tint_temperature: 0.0,
         u_condensation_rate: 0.0,
     }),
+    waveform: Object.freeze({
+        u_line_thickness: 0.005,
+        u_waveform_height: 0.2,
+        u_waveform_y: 0.8,
+        u_opacity: 0.85,
+    }),
 });
 
 function default_now() {

@@ -62,6 +62,7 @@ if _AUDIO_UTILS_SPEC is None or _AUDIO_UTILS_SPEC.loader is None:
 _audio_utils_module = importlib.util.module_from_spec(_AUDIO_UTILS_SPEC)
 _AUDIO_UTILS_SPEC.loader.exec_module(_audio_utils_module)
 extract_audio_features = _audio_utils_module.extract_audio_features
+WAVEFORM_SAMPLE_COUNT = _audio_utils_module.WAVEFORM_SAMPLE_COUNT
 
 _FULLSCREEN_QUAD_VERTICES = np.array(
     [-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0],
@@ -138,6 +139,55 @@ def _resolve_audio_feature_frame(
     return beat_value, rms_value, bass_value, mid_value, treble_value
 
 
+def _coerce_waveform_samples(waveform_values) -> list[float]:
+    if waveform_values is None:
+        return [0.0] * WAVEFORM_SAMPLE_COUNT
+
+    if hasattr(waveform_values, "tolist"):
+        waveform_values = waveform_values.tolist()
+
+    if not isinstance(waveform_values, list):
+        return [0.0] * WAVEFORM_SAMPLE_COUNT
+
+    normalized_values: list[float] = []
+    for value in waveform_values[:WAVEFORM_SAMPLE_COUNT]:
+        try:
+            normalized_values.append(float(np.clip(float(value), -1.0, 1.0)))
+        except (TypeError, ValueError):
+            normalized_values.append(0.0)
+
+    if len(normalized_values) < WAVEFORM_SAMPLE_COUNT:
+        normalized_values.extend([0.0] * (WAVEFORM_SAMPLE_COUNT - len(normalized_values)))
+    return normalized_values
+
+
+def _resolve_waveform_feature_frame(audio_features, frame_index: int) -> list[float]:
+    if frame_index < 0 or frame_index >= len(audio_features):
+        return [0.0] * WAVEFORM_SAMPLE_COUNT
+    feature = audio_features[frame_index]
+    if not isinstance(feature, dict):
+        return [0.0] * WAVEFORM_SAMPLE_COUNT
+    return _coerce_waveform_samples(feature.get("waveform"))
+
+
+def _set_program_uniform(program, uniform_name: str, uniform_value) -> None:
+    try:
+        uniform = program[uniform_name]
+    except KeyError:
+        return
+
+    if isinstance(uniform_value, (int, float, np.floating, np.integer)):
+        uniform.value = float(uniform_value)
+        return
+
+    if isinstance(uniform_value, (list, tuple)):
+        coerced_values = tuple(float(value) for value in uniform_value)
+        uniform.value = coerced_values
+        return
+
+    raise ValueError(f"Unsupported uniform type for '{uniform_name}': {type(uniform_value).__name__}")
+
+
 def _render_frames(
     image: torch.Tensor,
     effect_params: dict,
@@ -195,10 +245,7 @@ def _render_frames(
                 input_texture.write(source_frames[source_frame_index].tobytes())
                 active_source_frame_index = source_frame_index
             for uniform_name, uniform_value in final_uniform_params.items():
-                try:
-                    program[uniform_name].value = float(uniform_value)
-                except KeyError:
-                    continue
+                _set_program_uniform(program, uniform_name, uniform_value)
             beat_value, rms_value, bass_value, mid_value, treble_value = _resolve_audio_feature_frame(
                 resolved_audio_features, frame_index
             )
@@ -222,6 +269,18 @@ def _render_frames(
                 program["u_treble"].value = treble_value
             except KeyError:
                 pass
+            waveform_samples = _resolve_waveform_feature_frame(resolved_audio_features, frame_index)
+            features = resolved_audio_features
+            i = frame_index
+            if 0 <= i < len(features) and isinstance(features[i], dict) and "waveform" in features[i]:
+                waveform_samples = _coerce_waveform_samples(features[i]["waveform"])
+            try:
+                program['u_waveform'].value = features[i]['waveform']
+            except (KeyError, IndexError, TypeError, ValueError):
+                try:
+                    program["u_waveform"].value = waveform_samples
+                except KeyError:
+                    pass
             program["u_time"].value = frame_index / fps
             fbo.use()
             vao.render(moderngl.TRIANGLES)

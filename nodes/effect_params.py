@@ -79,6 +79,13 @@ DEFAULT_PARAMS: dict[str, dict] = {
         "u_dir_x": 0.7071,
         "u_dir_y": 0.7071,
     },
+    "waveform": {
+        "u_line_color": (1.0, 0.8, 0.2),
+        "u_line_thickness": 0.005,
+        "u_waveform_height": 0.2,
+        "u_waveform_y": 0.8,
+        "u_opacity": 0.85,
+    },
 }
 
 

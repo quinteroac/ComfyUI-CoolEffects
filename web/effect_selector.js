@@ -376,6 +376,22 @@ export function create_webgl2_renderer(canvas_element) {
         gl.uniform1f(uniform_location, numeric_value);
     };
 
+    const set_uniform_array = (name, values) => {
+        if (!program) return;
+        if (!Array.isArray(values) && !ArrayBuffer.isView(values)) return;
+        const uniform_location = get_uniform_location(name);
+        if (uniform_location === null) return;
+
+        const typed_values = new Float32Array(values.length);
+        for (let index = 0; index < values.length; index += 1) {
+            const numeric_value = Number(values[index]);
+            typed_values[index] = Number.isFinite(numeric_value) ? numeric_value : 0;
+        }
+
+        gl.useProgram(program);
+        gl.uniform1fv(uniform_location, typed_values);
+    };
+
     const render = (time_secs) => {
         if (!program) return;
         const w = canvas_element.width;
@@ -408,6 +424,7 @@ export function create_webgl2_renderer(canvas_element) {
         set_fragment_shader,
         set_image_texture,
         set_uniform,
+        set_uniform_array,
         render,
         dispose,
         gl,
@@ -523,6 +540,23 @@ export async function create_live_glsl_preview({
             preview_descriptor.uniforms[uniform_name] = numeric_value;
             if (renderer) {
                 renderer.set_uniform(uniform_name, numeric_value);
+            }
+        },
+        set_uniform_array(uniform_name, values) {
+            if (
+                typeof uniform_name !== "string" ||
+                uniform_name.length === 0 ||
+                (!Array.isArray(values) && !ArrayBuffer.isView(values))
+            ) {
+                return;
+            }
+            const numeric_values = Array.from(values, (value) => {
+                const numeric_value = Number(value);
+                return Number.isFinite(numeric_value) ? numeric_value : 0;
+            });
+            preview_descriptor.uniforms[uniform_name] = numeric_values;
+            if (renderer) {
+                renderer.set_uniform_array(uniform_name, numeric_values);
             }
         },
         set_input_image(next_image) {
