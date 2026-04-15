@@ -28,6 +28,7 @@ let EXECUTED_API = null;
 let PRETEXT_IMPORT_PROMISE = null;
 let PRETEXT_MODULE_CACHE = null;
 let PRETEXT_DYNAMIC_IMPORT = null;
+let PRETEXT_IMPORT_FAILURE = null;
 
 function default_dynamic_import(url) {
     return import(url);
@@ -261,6 +262,9 @@ async function import_pretext_module(dynamic_importer) {
 
 export async function load_pretext_rich_inline_module(dynamic_importer = get_dynamic_importer()) {
     const use_cache = dynamic_importer === get_dynamic_importer();
+    if (use_cache && PRETEXT_IMPORT_FAILURE) {
+        throw PRETEXT_IMPORT_FAILURE;
+    }
     if (use_cache && PRETEXT_MODULE_CACHE) {
         return PRETEXT_MODULE_CACHE;
     }
@@ -273,8 +277,15 @@ export async function load_pretext_rich_inline_module(dynamic_importer = get_dyn
             const module_obj = module_ref?.default ?? module_ref;
             if (use_cache) {
                 PRETEXT_MODULE_CACHE = module_obj;
+                PRETEXT_IMPORT_FAILURE = null;
             }
             return module_obj;
+        })
+        .catch((error) => {
+            if (use_cache) {
+                PRETEXT_IMPORT_FAILURE = error ?? new Error("Failed to import pretext rich-inline module");
+            }
+            throw error;
         })
         .finally(() => {
             if (use_cache) {
@@ -327,6 +338,10 @@ function request_pretext_fragment_widths(state, fragments, context) {
     if (!state) {
         return null;
     }
+    if (state.pretext_unavailable || PRETEXT_IMPORT_FAILURE) {
+        state.pretext_unavailable = true;
+        return null;
+    }
     const layout_key = get_fragment_layout_key(fragments);
     state.pretext_widths_by_key = state.pretext_widths_by_key ?? new Map();
     state.pretext_requests_by_key = state.pretext_requests_by_key ?? new Map();
@@ -344,6 +359,7 @@ function request_pretext_fragment_widths(state, fragments, context) {
                 return widths;
             }
         } catch (_error) {
+            state.pretext_unavailable = true;
             // Continue with async request fallback.
         }
     }
@@ -355,6 +371,7 @@ function request_pretext_fragment_widths(state, fragments, context) {
             }
         })
         .catch(() => {
+            state.pretext_unavailable = true;
             // Keep canvas fallback widths if pretext cannot load.
         })
         .finally(() => {
@@ -988,6 +1005,7 @@ export function set_pretext_dynamic_import_for_tests(import_fn) {
     PRETEXT_DYNAMIC_IMPORT = typeof import_fn === "function" ? import_fn : null;
     PRETEXT_IMPORT_PROMISE = null;
     PRETEXT_MODULE_CACHE = null;
+    PRETEXT_IMPORT_FAILURE = null;
 }
 
 void auto_register_comfy_extension();

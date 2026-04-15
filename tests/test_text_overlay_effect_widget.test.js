@@ -65,7 +65,15 @@ function create_mock_canvas_context() {
             return { width: String(text).length * 10 };
         },
         fillText(text, x, y) {
-            calls.fillText.push({ text, x, y, font: this.font, fillStyle: this.fillStyle });
+            calls.fillText.push({
+                text,
+                x,
+                y,
+                font: this.font,
+                fillStyle: this.fillStyle,
+                alpha: this.globalAlpha,
+                textBaseline: this.textBaseline,
+            });
         },
         drawImage() {
             calls.drawImage += 1;
@@ -346,6 +354,40 @@ describe("CoolTextOverlay widget preview", () => {
         expect(calls.fillText).toHaveLength(2);
         expect(calls.fillText[0].x).toBe(60);
         expect(calls.fillText[1].x).toBe(110);
+    });
+
+    test("US-004-AC01/AC02: pretext import failures use canvas layout fallback with same anchor and opacity rules", async () => {
+        const attempted = [];
+        set_pretext_dynamic_import_for_tests(async (source_url) => {
+            attempted.push(source_url);
+            throw new Error(`blocked: ${source_url}`);
+        });
+
+        const { ctx, calls } = create_mock_canvas_context();
+        const state = {
+            node: create_mock_node({
+                align: "right",
+                pos_x: 0.8,
+                pos_y: 0.6,
+                opacity: 0.4,
+                fragments: '[{"text":"AA","color":"#ff0000"},{"text":"B","color":"#00ff00"}]',
+            }),
+            canvas_element: { width: 200, height: 100, style: {} },
+            context: ctx,
+            status_element: { textContent: "" },
+            video_element: { readyState: 4, videoWidth: 200, videoHeight: 100 },
+        };
+
+        expect(() => render_overlay_text(state)).not.toThrow();
+        const pending_pretext_requests = Array.from(state.pretext_requests_by_key?.values?.() ?? []);
+        await Promise.all(pending_pretext_requests);
+        calls.fillText = [];
+        expect(() => render_overlay_text(state)).not.toThrow();
+
+        expect(attempted).toEqual([PRETEXT_CDN_URL, PRETEXT_VENDOR_URL]);
+        expect(calls.fillText).toHaveLength(2);
+        expect(calls.fillText[0]).toMatchObject({ text: "AA", x: 130, y: 60, alpha: 0.4 });
+        expect(calls.fillText[1]).toMatchObject({ text: "B", x: 150, y: 60, alpha: 0.4 });
     });
 
     test("US-003-AC01: fragment editor renders rows with all fragment field inputs", () => {

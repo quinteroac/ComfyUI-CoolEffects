@@ -29,3 +29,13 @@
 **Pitfalls Encountered:** Fragment widget callbacks can recurse when the editor writes JSON back into the same widget; fixed with a `fragment_editor_updating_widget` guard to prevent looped re-sync.
 
 **Useful Context for Future Agents:** Fragment rows are rendered with `data-fragment-field` attributes (`text`, `color`, `font_size`, `font_family`, `font_weight`, `remove`) to make UI behavior testable without a browser DOM; removing is intentionally blocked when only one fragment remains.
+
+## US-004 — Graceful degradation when pretext unavailable
+
+**Summary:** Hardened `CoolTextOverlay` rich-inline measurement so rejected pretext imports no longer retrigger per render, and preview text keeps rendering through the canvas fallback path.
+
+**Key Decisions:** Added a cached `PRETEXT_IMPORT_FAILURE` sentinel and a per-widget `pretext_unavailable` flag so once pretext fails, rendering immediately falls back to `measureText` widths while preserving existing placement/opacity logic.
+
+**Pitfalls Encountered:** Async pretext failure handling rerenders from `finally`, which made initial assertions count extra draw calls; tests now await pending width requests before asserting fallback-only behavior.
+
+**Useful Context for Future Agents:** `request_pretext_fragment_widths()` now short-circuits when pretext is unavailable, so tests that verify import attempts should expect one CDN+vendor attempt sequence and then no further import retries on subsequent renders.
