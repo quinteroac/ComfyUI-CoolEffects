@@ -450,6 +450,92 @@ def test_text_overlay_fragments_render_respective_colors(monkeypatch):
     assert int(yellow_mask.sum()) > 0
 
 
+def test_text_overlay_font_loader_falls_back_to_pillow_default_on_oserror(monkeypatch):
+    module = _load_module(NODE_PATH)
+    sentinel_font = object()
+
+    def _raise_oserror(*_args, **_kwargs):
+        raise OSError("font not found")
+
+    monkeypatch.setattr(module.ImageFont, "truetype", _raise_oserror)
+    monkeypatch.setattr(module.ImageFont, "load_default", lambda: sentinel_font)
+
+    resolved_font = module._load_font_for_style("missing-font", 48, "normal")
+    assert resolved_font is sentinel_font
+
+
+def test_text_overlay_uses_fallback_font_and_still_renders_visible_text(monkeypatch):
+    module = _load_module(NODE_PATH)
+    _mock_comfy_api(monkeypatch)
+    node = module.CoolTextOverlay()
+    original_truetype = module.ImageFont.truetype
+
+    def _raise_oserror_for_named_fonts(font, *args, **kwargs):
+        if hasattr(font, "read"):
+            return original_truetype(font, *args, **kwargs)
+        raise OSError("font not found")
+
+    monkeypatch.setattr(module.ImageFont, "truetype", _raise_oserror_for_named_fonts)
+
+    input_images = torch.zeros((1, 60, 100, 3), dtype=torch.float32)
+    source_video = _FakeVideo(input_images.clone())
+    output_video, = node.execute(
+        video=source_video,
+        text="VISIBLE",
+        font_family="missing-font",
+        font_size=48,
+        color="#ffffff",
+        font_weight="normal",
+        pos_x=0.5,
+        pos_y=0.3,
+        align="center",
+        opacity=1.0,
+    )
+
+    changed = _changed_pixels(output_video.images, input_images)
+    assert changed.numel() > 0
+
+
+def test_text_overlay_resolves_font_once_per_unique_style_tuple(monkeypatch):
+    module = _load_module(NODE_PATH)
+    _mock_comfy_api(monkeypatch)
+    node = module.CoolTextOverlay()
+    resolved_tuples = []
+
+    def _recording_font_loader(font_family, font_size, font_weight):
+        resolved_tuples.append((str(font_family), int(font_size), str(font_weight)))
+        return ImageFont.load_default()
+
+    monkeypatch.setattr(module, "_load_font_for_style", _recording_font_loader)
+
+    source_video = _FakeVideo(torch.zeros((1, 80, 220, 3), dtype=torch.float32))
+    fragments = (
+        '[{"text":"A","font_family":"arial","font_size":48,"font_weight":"normal","color":"#ffffff"},'
+        '{"text":"B","font_family":"arial","font_size":48,"font_weight":"normal","color":"#00ff00"},'
+        '{"text":"C","font_family":"mono","font_size":30,"font_weight":"bold","color":"#ff0000"},'
+        '{"text":"D","font_family":"mono","font_size":30,"font_weight":"bold","color":"#ffff00"}]'
+    )
+
+    node.execute(
+        video=source_video,
+        text="ignored",
+        font_family="arial",
+        font_size=48,
+        color="#ffffff",
+        font_weight="normal",
+        pos_x=0.5,
+        pos_y=0.5,
+        align="center",
+        opacity=1.0,
+        fragments=fragments,
+    )
+
+    assert resolved_tuples == [
+        ("arial", 48, "normal"),
+        ("mono", 30, "bold"),
+    ]
+
+
 def test_package_registers_cool_text_overlay_node():
     package_module = _load_module(PACKAGE_INIT)
     assert "CoolTextOverlay" in package_module.NODE_CLASS_MAPPINGS

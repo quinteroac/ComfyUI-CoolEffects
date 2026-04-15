@@ -90,6 +90,13 @@ def _load_font_for_style(font_family, font_size, font_weight):
     return ImageFont.load_default()
 
 
+def _resolve_font_cached(font_cache, font_family, font_size, font_weight):
+    cache_key = (str(font_family), int(font_size), str(font_weight))
+    if cache_key not in font_cache:
+        font_cache[cache_key] = _load_font_for_style(cache_key[0], cache_key[1], cache_key[2])
+    return font_cache[cache_key]
+
+
 def _measure_text(draw, text: str, font):
     left, _, right, _ = draw.textbbox((0, 0), text, font=font)
     return max(0.0, float(right - left))
@@ -132,7 +139,16 @@ def _resolve_fragment_layout(draw, fragments, width, height, pos_x, pos_y, align
     return origin_x, baseline_y, fragment_widths, fragment_ascents
 
 
-def _normalize_fragments(parsed_fragments, default_font_family, default_font_size, default_color, default_font_weight):
+def _normalize_fragments(
+    parsed_fragments,
+    default_font_family,
+    default_font_size,
+    default_color,
+    default_font_weight,
+    font_cache=None,
+):
+    if font_cache is None:
+        font_cache = {}
     normalized_fragments = []
     for fragment_index, fragment in enumerate(parsed_fragments):
         if not isinstance(fragment, dict):
@@ -148,7 +164,8 @@ def _normalize_fragments(parsed_fragments, default_font_family, default_font_siz
             fragment.get("font_weight"),
             default_font_weight,
         )
-        fragment_font = _load_font_for_style(
+        fragment_font = _resolve_font_cached(
+            font_cache,
             fragment_font_family,
             fragment_font_size,
             fragment_font_weight,
@@ -246,14 +263,7 @@ class CoolTextOverlay:
         video_images, frame_rate, audio = _extract_video_components(video)
         parsed_fragments = _parse_fragments(fragments)
         default_color = _resolve_color(color)
-        default_fragments = [
-            {
-                "text": str(text),
-                "font": _load_font_for_style(font_family, font_size, font_weight),
-                "color": default_color,
-            }
-        ]
-        render_fragments = default_fragments
+        font_cache = {}
         if parsed_fragments:
             render_fragments = _normalize_fragments(
                 parsed_fragments=parsed_fragments,
@@ -261,7 +271,16 @@ class CoolTextOverlay:
                 default_font_size=font_size,
                 default_color=color,
                 default_font_weight=font_weight,
+                font_cache=font_cache,
             )
+        else:
+            render_fragments = [
+                {
+                    "text": str(text),
+                    "font": _resolve_font_cached(font_cache, font_family, font_size, font_weight),
+                    "color": default_color,
+                }
+            ]
 
         rendered_frames = []
         for frame in video_images:

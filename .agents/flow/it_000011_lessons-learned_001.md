@@ -19,3 +19,13 @@
 **Pitfalls Encountered:** Pillow font objects vary by environment, so baseline calculations needed a fallback when `getmetrics()` is unavailable; color assertions in tests were written with channel thresholds (instead of exact values) to avoid anti-aliasing noise.
 
 **Useful Context for Future Agents:** Fragment JSON errors now raise clear `ValueError` messages (`fragments must be valid JSON...`); tests in `tests/test_text_overlay_effect_node.py` now include fragment default fallback, invalid JSON handling, left-to-right composed-line layout, and per-fragment color rendering checks.
+
+## US-003 — Pillow font resolution
+
+**Summary:** Updated `CoolTextOverlay` font handling to cache resolved fonts by `(font_family, font_size, font_weight)` and preserve robust fallback behavior so unavailable fonts do not break rendering.
+
+**Key Decisions:** Added `_resolve_font_cached()` as a shared cache path used by both default text rendering and fragment-based rendering; ensured fragment rendering reuses one cache per `execute()` call; kept fallback behavior inside `_load_font_for_style()` (`ImageFont.truetype` attempts followed by `ImageFont.load_default()` + warning).
+
+**Pitfalls Encountered:** Existing tests monkeypatch `_load_font_for_style` with positional-only lambdas, so cache internals had to call the loader positionally (not keyword args); monkeypatching `ImageFont.truetype` globally can also break Pillow’s own `load_default()` path unless file-like inputs are passed through.
+
+**Useful Context for Future Agents:** AC-focused tests were added in `tests/test_text_overlay_effect_node.py` for OSError fallback, visible fallback output, and tuple-level font resolution caching; the tuple-caching assertion is validated through `execute()` with repeated fragment styles, not only helper-level unit tests.
