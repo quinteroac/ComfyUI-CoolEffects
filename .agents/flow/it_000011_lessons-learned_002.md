@@ -19,3 +19,13 @@
 **Pitfalls Encountered:** Fully async width resolution initially made test timing nondeterministic; resolved by adding a synchronous fast path when the pretext module is already cached and preloading module state in the unit test before asserting rendered coordinates.
 
 **Useful Context for Future Agents:** Use `set_pretext_dynamic_import_for_tests()` to inject deterministic loaders in Bun tests; `load_pretext_rich_inline_module()` accepts a custom importer for URL-order assertions; preview x positions will only use measured pretext widths after first measurement for a given fragment set.
+
+## US-003 — Fragment editor UI in node widget
+
+**Summary:** Added an inline fragment editor panel to `CoolTextOverlay` so users can add/remove/edit fragment rows directly in the node, with immediate JSON sync to the `fragments` widget and live preview refresh.
+
+**Key Decisions:** Reused node-level text style controls as fragment defaults for the “Add fragment” action; centralized fragment normalization/serialization into `read_fragment_editor_fragments()` and `serialize_fragment_editor_fragments()` so preview and UI stay in sync; exported `mount_text_overlay_widget()` for focused Bun widget UI tests.
+
+**Pitfalls Encountered:** Fragment widget callbacks can recurse when the editor writes JSON back into the same widget; fixed with a `fragment_editor_updating_widget` guard to prevent looped re-sync.
+
+**Useful Context for Future Agents:** Fragment rows are rendered with `data-fragment-field` attributes (`text`, `color`, `font_size`, `font_family`, `font_weight`, `remove`) to make UI behavior testable without a browser DOM; removing is intentionally blocked when only one fragment remains.

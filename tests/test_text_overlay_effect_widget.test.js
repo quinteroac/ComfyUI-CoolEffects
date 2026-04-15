@@ -4,10 +4,13 @@ import {
     PRETEXT_CDN_URL,
     PRETEXT_VENDOR_URL,
     load_pretext_rich_inline_module,
+    mount_text_overlay_widget,
     normalize_overlay_fragments,
     patch_preview_widget_callbacks,
+    read_fragment_editor_fragments,
     render_overlay_text,
     render_preview_frame,
+    serialize_fragment_editor_fragments,
     set_pretext_dynamic_import_for_tests,
     update_preview_layout,
 } from "../web/text_overlay_effect.js";
@@ -74,6 +77,98 @@ function create_mock_canvas_context() {
         restore() {},
     };
     return { ctx, calls };
+}
+
+function create_mock_fragment_editor_document() {
+    class MockElement {
+        constructor(tag_name) {
+            this.tagName = String(tag_name).toUpperCase();
+            this.children = [];
+            this.style = {};
+            this.attributes = {};
+            this.listeners = new Map();
+            this.dataset = {};
+            this.value = "";
+            this._textContent = "";
+            this.type = "";
+            this.disabled = false;
+        }
+
+        append(...nodes) {
+            this.children.push(...nodes);
+        }
+
+        setAttribute(name, value) {
+            this.attributes[name] = String(value);
+        }
+
+        addEventListener(name, callback) {
+            if (!this.listeners.has(name)) {
+                this.listeners.set(name, []);
+            }
+            this.listeners.get(name).push(callback);
+        }
+
+        dispatch(name) {
+            for (const callback of this.listeners.get(name) ?? []) {
+                callback({ target: this });
+            }
+        }
+
+        click() {
+            this.dispatch("click");
+        }
+
+        get textContent() {
+            return this._textContent;
+        }
+
+        set textContent(value) {
+            this._textContent = String(value ?? "");
+            if (this._textContent.length === 0) {
+                this.children = [];
+            }
+        }
+
+        queryByDataField(field_name) {
+            if (this.attributes["data-fragment-field"] === field_name) {
+                return this;
+            }
+            for (const child of this.children) {
+                const found = child?.queryByDataField?.(field_name);
+                if (found) {
+                    return found;
+                }
+            }
+            return null;
+        }
+    }
+
+    return {
+        createElement(tag_name) {
+            const element = new MockElement(tag_name);
+            if (String(tag_name).toLowerCase() === "canvas") {
+                const { ctx } = create_mock_canvas_context();
+                element.getContext = () => ctx;
+            }
+            if (String(tag_name).toLowerCase() === "video") {
+                element.readyState = 0;
+                element.videoWidth = 0;
+                element.videoHeight = 0;
+                element.load = () => {};
+                element.pause = () => {};
+            }
+            return element;
+        },
+    };
+}
+
+function create_mock_dom_node(overrides = {}) {
+    const node = create_mock_node(overrides);
+    node.addDOMWidget = function (_name, _type, container) {
+        return { element: container, computeSize: null };
+    };
+    return node;
 }
 
 describe("CoolTextOverlay widget preview", () => {
@@ -251,6 +346,119 @@ describe("CoolTextOverlay widget preview", () => {
         expect(calls.fillText).toHaveLength(2);
         expect(calls.fillText[0].x).toBe(60);
         expect(calls.fillText[1].x).toBe(110);
+    });
+
+    test("US-003-AC01: fragment editor renders rows with all fragment field inputs", () => {
+        const document_ref = create_mock_fragment_editor_document();
+        const node = create_mock_dom_node({
+            fragments:
+                '[{"text":"One","color":"#ff0000","font_size":32,"font_family":"serif","font_weight":"bold"},' +
+                '{"text":"Two","color":"#00ff00","font_size":28,"font_family":"sans","font_weight":"normal"}]',
+        });
+
+        const state = mount_text_overlay_widget({ node, document_ref, api_ref: null });
+        const rows = state.fragment_rows_container.children;
+
+        expect(rows).toHaveLength(2);
+        const first_row = rows[0];
+        expect(first_row.queryByDataField("text")).not.toBeNull();
+        expect(first_row.queryByDataField("color")).not.toBeNull();
+        expect(first_row.queryByDataField("font_size")).not.toBeNull();
+        expect(first_row.queryByDataField("font_family")).not.toBeNull();
+        expect(first_row.queryByDataField("font_weight")).not.toBeNull();
+        expect(first_row.queryByDataField("remove")).not.toBeNull();
+    });
+
+    test("US-003-AC02: Add fragment appends defaults from node-level style controls", () => {
+        const document_ref = create_mock_fragment_editor_document();
+        const node = create_mock_dom_node({
+            text: "Node Default",
+            font_family: "serif",
+            font_size: 64,
+            color: "#00ff00",
+            font_weight: "bold",
+            fragments: '[{"text":"Existing","color":"#ffffff","font_size":40,"font_family":"arial","font_weight":"normal"}]',
+        });
+
+        const state = mount_text_overlay_widget({ node, document_ref, api_ref: null });
+        state.fragment_add_button.click();
+
+        expect(state.fragment_rows).toHaveLength(2);
+        const appended = state.fragment_rows[1];
+        expect(appended).toEqual({
+            text: "Node Default",
+            font_size: 64,
+            font_family: "serif",
+            font_weight: "bold",
+            color: "#00ff00",
+        });
+    });
+
+    test("US-003-AC03: Remove deletes fragments but enforces minimum row count of one", () => {
+        const document_ref = create_mock_fragment_editor_document();
+        const node = create_mock_dom_node({
+            fragments:
+                '[{"text":"A","color":"#ffffff","font_size":48,"font_family":"arial","font_weight":"normal"},' +
+                '{"text":"B","color":"#ffffff","font_size":48,"font_family":"arial","font_weight":"normal"}]',
+        });
+
+        const state = mount_text_overlay_widget({ node, document_ref, api_ref: null });
+        const first_remove = state.fragment_rows_container.children[0].queryByDataField("remove");
+        first_remove.click();
+        expect(state.fragment_rows).toHaveLength(1);
+
+        const only_remove = state.fragment_rows_container.children[0].queryByDataField("remove");
+        only_remove.click();
+        expect(state.fragment_rows).toHaveLength(1);
+        expect(only_remove.disabled).toBe(true);
+    });
+
+    test("US-003-AC04/AC05: editing fragment fields serializes JSON to widget and triggers preview refresh", () => {
+        const document_ref = create_mock_fragment_editor_document();
+        let fragment_callback_count = 0;
+        const node = create_mock_dom_node({
+            fragments: '[{"text":"A","color":"#ffffff","font_size":48,"font_family":"arial","font_weight":"normal"}]',
+        });
+        const fragment_widget = node.widgets.find((widget) => widget.name === "fragments");
+        fragment_widget.callback = () => {
+            fragment_callback_count += 1;
+        };
+
+        const state = mount_text_overlay_widget({ node, document_ref, api_ref: null });
+        const text_input = state.fragment_rows_container.children[0].queryByDataField("text");
+        text_input.value = "Updated";
+        const before_dirty = node.dirty_calls;
+        text_input.dispatch("input");
+
+        const serialized = fragment_widget.value;
+        const parsed = JSON.parse(serialized);
+        expect(parsed[0].text).toBe("Updated");
+        expect(fragment_callback_count).toBeGreaterThan(0);
+        expect(node.dirty_calls).toBeGreaterThan(before_dirty);
+    });
+
+    test("fragment editor read/serialize helpers normalize malformed fragment payloads", () => {
+        const node = create_mock_node({
+            text: "Fallback",
+            font_family: "arial",
+            font_size: 48,
+            color: "#ffffff",
+            font_weight: "normal",
+            fragments: '[{"text":"X","font_size":"bad","font_weight":"invalid","color":"nope"}]',
+        });
+        const rows = read_fragment_editor_fragments(node);
+        expect(rows).toEqual([
+            {
+                text: "X",
+                font_size: 48,
+                font_family: "arial",
+                font_weight: "normal",
+                color: "#ffffff",
+            },
+        ]);
+        expect(serialize_fragment_editor_fragments(rows)).toBe(
+            '[{"text":"X","font_size":48,"font_family":"arial","font_weight":"normal","color":"#ffffff"}]',
+        );
     });
 });
 

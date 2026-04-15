@@ -100,13 +100,17 @@ export function update_preview_layout(state, source_width, source_height) {
     state.display_height = display_height;
     state.canvas_element.style.aspectRatio = `${safe_width} / ${safe_height}`;
 
+    const editor_height = Math.max(0, Number(state?.fragment_editor_height) || 0);
     if (state.widget) {
-        state.widget.computeSize = () => [display_width, display_height + PREVIEW_CHROME_HEIGHT];
+        state.widget.computeSize = () => [
+            display_width,
+            display_height + PREVIEW_CHROME_HEIGHT + editor_height,
+        ];
     }
 
     const node = state.node;
     const desired_width = Math.max(Number(node?.size?.[0]) || 0, display_width + 16);
-    const desired_height = Math.max(Number(node?.size?.[1]) || 0, display_height + 76);
+    const desired_height = Math.max(Number(node?.size?.[1]) || 0, display_height + 76 + editor_height);
     if (node && typeof node.setSize === "function") {
         node.setSize([desired_width, desired_height]);
     } else if (node) {
@@ -168,6 +172,68 @@ function parse_color(value, fallback) {
         return text;
     }
     return fallback;
+}
+
+function build_default_fragment(node) {
+    return {
+        text: widget_string(node, "text", "Cool Text"),
+        font_size: Math.round(clamp(widget_number(node, "font_size", 48), 8, 512)),
+        font_family: widget_string(node, "font_family", "Arial"),
+        font_weight: widget_string(node, "font_weight", "normal").toLowerCase() === "bold" ? "bold" : "normal",
+        color: parse_color(widget_string(node, "color", "#ffffff"), "#ffffff"),
+    };
+}
+
+function normalize_fragment_style(fragment, default_fragment) {
+    return {
+        text: String(fragment?.text ?? ""),
+        font_size: Math.round(
+            clamp(
+                Number(fragment?.font_size ?? default_fragment.font_size) || default_fragment.font_size,
+                8,
+                512,
+            ),
+        ),
+        font_family: String(fragment?.font_family ?? default_fragment.font_family),
+        font_weight:
+            String(fragment?.font_weight ?? default_fragment.font_weight).toLowerCase() === "bold"
+                ? "bold"
+                : "normal",
+        color: parse_color(fragment?.color ?? default_fragment.color, default_fragment.color),
+    };
+}
+
+function parse_fragment_list_widget_value(node) {
+    const raw_fragments = widget_string(node, "fragments", "[]").trim();
+    if (raw_fragments.length === 0 || raw_fragments === "[]") {
+        return [];
+    }
+    try {
+        const parsed = JSON.parse(raw_fragments);
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (_error) {
+        return [];
+    }
+}
+
+export function serialize_fragment_editor_fragments(fragments) {
+    const normalized = (Array.isArray(fragments) ? fragments : []).map((fragment) => ({
+        text: String(fragment?.text ?? ""),
+        font_size: Math.round(clamp(Number(fragment?.font_size) || 48, 8, 512)),
+        font_family: String(fragment?.font_family ?? "Arial"),
+        font_weight: String(fragment?.font_weight ?? "normal").toLowerCase() === "bold" ? "bold" : "normal",
+        color: parse_color(fragment?.color, "#ffffff"),
+    }));
+    return JSON.stringify(normalized);
+}
+
+export function read_fragment_editor_fragments(node) {
+    const default_fragment = build_default_fragment(node);
+    const parsed = parse_fragment_list_widget_value(node);
+    const normalized = parsed
+        .filter((fragment) => fragment && typeof fragment === "object")
+        .map((fragment) => normalize_fragment_style(fragment, default_fragment));
+    return normalized.length > 0 ? normalized : [default_fragment];
 }
 
 function to_canvas_font(fragment) {
@@ -300,54 +366,10 @@ function request_pretext_fragment_widths(state, fragments, context) {
 }
 
 export function normalize_overlay_fragments(node) {
-    const default_fragment = {
-        text: widget_string(node, "text", "Cool Text"),
-        font_size: Math.round(clamp(widget_number(node, "font_size", 48), 8, 512)),
-        font_family: widget_string(node, "font_family", "Arial"),
-        font_weight: widget_string(node, "font_weight", "normal").toLowerCase() === "bold" ? "bold" : "normal",
-        color: parse_color(widget_string(node, "color", "#ffffff"), "#ffffff"),
-    };
-    const raw_fragments = widget_string(node, "fragments", "[]").trim();
-    if (raw_fragments.length === 0 || raw_fragments === "[]") {
-        return [default_fragment];
-    }
-
-    let parsed = null;
-    try {
-        parsed = JSON.parse(raw_fragments);
-    } catch (_error) {
-        return [default_fragment];
-    }
-    if (!Array.isArray(parsed) || parsed.length === 0) {
-        return [default_fragment];
-    }
-
-    const rich_fragments = [];
-    for (const fragment of parsed) {
-        if (!fragment || typeof fragment !== "object") {
-            continue;
-        }
-        const text = String(fragment.text ?? "");
-        if (text.length === 0) {
-            continue;
-        }
-        rich_fragments.push({
-            text,
-            font_size: Math.round(
-                clamp(
-                    Number(fragment.font_size ?? default_fragment.font_size) || default_fragment.font_size,
-                    8,
-                    512,
-                ),
-            ),
-            font_family: String(fragment.font_family ?? default_fragment.font_family),
-            font_weight:
-                String(fragment.font_weight ?? default_fragment.font_weight).toLowerCase() === "bold"
-                    ? "bold"
-                    : "normal",
-            color: parse_color(fragment.color ?? default_fragment.color, default_fragment.color),
-        });
-    }
+    const default_fragment = build_default_fragment(node);
+    const rich_fragments = read_fragment_editor_fragments(node).filter(
+        (fragment) => String(fragment?.text ?? "").length > 0,
+    );
     return rich_fragments.length > 0 ? rich_fragments : [default_fragment];
 }
 
@@ -468,6 +490,203 @@ function resolve_connected_video_entry(state) {
     return VIDEO_OUTPUT_BY_NODE_ID.get(origin_id) ?? null;
 }
 
+function sync_fragment_editor_to_widget(state) {
+    const node = state?.node;
+    const fragments_widget = find_widget(node, "fragments");
+    if (!fragments_widget) {
+        render_preview_frame(state);
+        node?.setDirtyCanvas?.(true, true);
+        return;
+    }
+    const serialized_fragments = serialize_fragment_editor_fragments(state.fragment_rows);
+    fragments_widget.value = serialized_fragments;
+    state.fragment_editor_updating_widget = true;
+    try {
+        if (typeof fragments_widget.callback === "function") {
+            fragments_widget.callback.call(fragments_widget, serialized_fragments);
+        } else {
+            render_preview_frame(state);
+            node?.setDirtyCanvas?.(true, true);
+        }
+    } finally {
+        state.fragment_editor_updating_widget = false;
+    }
+}
+
+function update_fragment_remove_buttons(state) {
+    const buttons = state?.fragment_remove_buttons ?? [];
+    const disable_remove = buttons.length <= 1;
+    for (const button of buttons) {
+        button.disabled = disable_remove;
+        button.title = disable_remove ? "At least one fragment is required." : "Remove this fragment";
+    }
+}
+
+function render_fragment_editor_rows(state, document_ref = globalThis.document) {
+    const rows_container = state?.fragment_rows_container;
+    if (!rows_container || !document_ref) {
+        return;
+    }
+    rows_container.textContent = "";
+    state.fragment_remove_buttons = [];
+
+    state.fragment_rows.forEach((fragment, index) => {
+        const row = document_ref.createElement("div");
+        row.setAttribute("data-fragment-row", String(index));
+        Object.assign(row.style, {
+            display: "grid",
+            gridTemplateColumns: "minmax(0,1fr) 80px 70px 92px 70px",
+            gap: "6px",
+            alignItems: "center",
+            minWidth: "0",
+        });
+
+        const text_input = document_ref.createElement("input");
+        text_input.type = "text";
+        text_input.value = fragment.text;
+        text_input.placeholder = "Text";
+        text_input.setAttribute("data-fragment-field", "text");
+        Object.assign(text_input.style, {
+            minWidth: "0",
+        });
+        text_input.addEventListener("input", () => {
+            state.fragment_rows[index].text = String(text_input.value ?? "");
+            sync_fragment_editor_to_widget(state);
+        });
+
+        const color_input = document_ref.createElement("input");
+        color_input.type = "color";
+        color_input.value = parse_color(fragment.color, "#ffffff");
+        color_input.setAttribute("data-fragment-field", "color");
+        color_input.addEventListener("input", () => {
+            state.fragment_rows[index].color = parse_color(color_input.value, "#ffffff");
+            sync_fragment_editor_to_widget(state);
+        });
+
+        const size_input = document_ref.createElement("input");
+        size_input.type = "number";
+        size_input.value = String(fragment.font_size);
+        size_input.min = "8";
+        size_input.max = "512";
+        size_input.step = "1";
+        size_input.setAttribute("data-fragment-field", "font_size");
+        size_input.addEventListener("input", () => {
+            state.fragment_rows[index].font_size = Math.round(clamp(Number(size_input.value) || 48, 8, 512));
+            size_input.value = String(state.fragment_rows[index].font_size);
+            sync_fragment_editor_to_widget(state);
+        });
+
+        const family_input = document_ref.createElement("input");
+        family_input.type = "text";
+        family_input.value = fragment.font_family;
+        family_input.placeholder = "Font family";
+        family_input.setAttribute("data-fragment-field", "font_family");
+        family_input.addEventListener("input", () => {
+            state.fragment_rows[index].font_family = String(family_input.value ?? "");
+            sync_fragment_editor_to_widget(state);
+        });
+
+        const trailing_actions = document_ref.createElement("div");
+        Object.assign(trailing_actions.style, {
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "6px",
+            minWidth: "0",
+        });
+
+        const weight_select = document_ref.createElement("select");
+        weight_select.setAttribute("data-fragment-field", "font_weight");
+        const normal_option = document_ref.createElement("option");
+        normal_option.value = "normal";
+        normal_option.textContent = "Normal";
+        const bold_option = document_ref.createElement("option");
+        bold_option.value = "bold";
+        bold_option.textContent = "Bold";
+        weight_select.append(normal_option, bold_option);
+        weight_select.value = fragment.font_weight === "bold" ? "bold" : "normal";
+        weight_select.addEventListener("change", () => {
+            state.fragment_rows[index].font_weight = weight_select.value === "bold" ? "bold" : "normal";
+            sync_fragment_editor_to_widget(state);
+        });
+
+        const remove_button = document_ref.createElement("button");
+        remove_button.type = "button";
+        remove_button.textContent = "Remove";
+        remove_button.setAttribute("data-fragment-field", "remove");
+        remove_button.addEventListener("click", () => {
+            if (state.fragment_rows.length <= 1) {
+                update_fragment_remove_buttons(state);
+                return;
+            }
+            state.fragment_rows.splice(index, 1);
+            render_fragment_editor_rows(state, document_ref);
+            sync_fragment_editor_to_widget(state);
+        });
+
+        state.fragment_remove_buttons.push(remove_button);
+        trailing_actions.append(weight_select, remove_button);
+        row.append(text_input, color_input, size_input, family_input, trailing_actions);
+        rows_container.append(row);
+    });
+
+    update_fragment_remove_buttons(state);
+    state.fragment_editor_height = 68 + state.fragment_rows.length * 36;
+    update_preview_layout(state, state.preview_width || DEFAULT_PREVIEW_WIDTH, state.preview_height || DEFAULT_PREVIEW_HEIGHT);
+}
+
+function sync_fragment_editor_from_widget(state, document_ref = globalThis.document) {
+    state.fragment_rows = read_fragment_editor_fragments(state.node);
+    render_fragment_editor_rows(state, document_ref);
+}
+
+function mount_fragment_editor(state, document_ref) {
+    const panel = document_ref.createElement("div");
+    panel.setAttribute("data-fragment-editor", "true");
+    Object.assign(panel.style, {
+        display: "grid",
+        gap: "6px",
+        padding: "8px",
+        borderRadius: "8px",
+        background: "#10151d",
+        border: "1px solid #273244",
+    });
+
+    const panel_header = document_ref.createElement("div");
+    panel_header.textContent = "Fragments";
+    Object.assign(panel_header.style, {
+        fontSize: "11px",
+        fontWeight: "600",
+        color: "#c4d5ea",
+        letterSpacing: "0.02em",
+    });
+
+    const rows_container = document_ref.createElement("div");
+    Object.assign(rows_container.style, {
+        display: "grid",
+        gap: "6px",
+    });
+
+    const add_button = document_ref.createElement("button");
+    add_button.type = "button";
+    add_button.textContent = "Add fragment";
+    Object.assign(add_button.style, {
+        justifySelf: "start",
+    });
+    add_button.addEventListener("click", () => {
+        state.fragment_rows.push(build_default_fragment(state.node));
+        render_fragment_editor_rows(state, document_ref);
+        sync_fragment_editor_to_widget(state);
+    });
+
+    panel.append(panel_header, rows_container, add_button);
+    state.fragment_rows_container = rows_container;
+    state.fragment_add_button = add_button;
+    state.fragment_rows = read_fragment_editor_fragments(state.node);
+    render_fragment_editor_rows(state, document_ref);
+    sync_fragment_editor_to_widget(state);
+    return panel;
+}
+
 export function patch_preview_widget_callbacks(node, state) {
     for (const widget of node?.widgets ?? []) {
         if (!VIDEO_WIDGET_NAMES.has(widget?.name) || widget.__cool_text_overlay_patched) {
@@ -478,6 +697,9 @@ export function patch_preview_widget_callbacks(node, state) {
         widget.callback = function patched_widget_callback(value) {
             if (typeof previous_callback === "function") {
                 previous_callback.call(this, value);
+            }
+            if (widget.name === "fragments" && !state.fragment_editor_updating_widget) {
+                sync_fragment_editor_from_widget(state);
             }
             render_preview_frame(state);
             state.node?.setDirtyCanvas?.(true, true);
@@ -532,7 +754,7 @@ function maybe_remove_executed_listener() {
     EXECUTED_HANDLER = null;
 }
 
-function mount_text_overlay_widget({
+export function mount_text_overlay_widget({
     node,
     document_ref = globalThis.document,
     api_ref = null,
@@ -547,7 +769,7 @@ function mount_text_overlay_widget({
     const container = document_ref.createElement("div");
     Object.assign(container.style, {
         display: "grid",
-        gridTemplateRows: "auto auto",
+        gridTemplateRows: "auto auto auto",
         gap: "6px",
         width: "100%",
         padding: "6px 8px 8px",
@@ -576,8 +798,6 @@ function mount_text_overlay_widget({
     });
     status.textContent = "Connect a VIDEO input to preview.";
 
-    container.append(canvas, status);
-
     const widget = node.addDOMWidget("text_overlay_preview", "div", container, {
         serialize: false,
         hideOnZoom: false,
@@ -601,7 +821,12 @@ function mount_text_overlay_widget({
         video_source_url: "",
         preview_width: DEFAULT_PREVIEW_WIDTH,
         preview_height: DEFAULT_PREVIEW_HEIGHT,
+        fragment_rows: [],
+        fragment_remove_buttons: [],
+        fragment_editor_updating_widget: false,
     };
+    const fragment_editor = mount_fragment_editor(state, document_ref);
+    container.append(fragment_editor, canvas, status);
 
     video_element.addEventListener("loadedmetadata", () => {
         update_preview_layout(state, video_element.videoWidth, video_element.videoHeight);
