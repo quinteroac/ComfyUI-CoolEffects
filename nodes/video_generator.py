@@ -53,6 +53,16 @@ _EFFECT_PARAMS_SPEC.loader.exec_module(_effect_params_module)
 EFFECT_PARAMS = _effect_params_module.EFFECT_PARAMS
 merge_params = _effect_params_module.merge_params
 
+_AUDIO_UTILS_PATH = Path(__file__).resolve().parent / "audio_utils.py"
+_AUDIO_UTILS_SPEC = importlib.util.spec_from_file_location(
+    "cool_effects_audio_utils_for_video_generator", _AUDIO_UTILS_PATH
+)
+if _AUDIO_UTILS_SPEC is None or _AUDIO_UTILS_SPEC.loader is None:
+    raise ValueError(f"Missing audio utils config at {_AUDIO_UTILS_PATH}")
+_audio_utils_module = importlib.util.module_from_spec(_AUDIO_UTILS_SPEC)
+_AUDIO_UTILS_SPEC.loader.exec_module(_audio_utils_module)
+extract_audio_features = _audio_utils_module.extract_audio_features
+
 _FULLSCREEN_QUAD_VERTICES = np.array(
     [-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0],
     dtype="f4",
@@ -89,7 +99,32 @@ def _extract_effect_name(effect_params: dict) -> str:
     return effect_name
 
 
-def _render_frames(image: torch.Tensor, effect_params: dict, fps: int, duration: float) -> torch.Tensor:
+def _resolve_audio_feature_frame(audio_features, frame_index: int) -> tuple[float, float]:
+    if frame_index < 0 or frame_index >= len(audio_features):
+        return 0.0, 0.0
+    feature = audio_features[frame_index]
+    if not isinstance(feature, dict):
+        return 0.0, 0.0
+
+    beat_flag = feature.get("beat", False)
+    beat_value = 1.0 if bool(beat_flag) else 0.0
+
+    try:
+        rms_value = float(feature.get("rms", 0.0))
+    except (TypeError, ValueError):
+        rms_value = 0.0
+
+    rms_value = float(np.clip(rms_value, 0.0, 1.0))
+    return beat_value, rms_value
+
+
+def _render_frames(
+    image: torch.Tensor,
+    effect_params: dict,
+    fps: int,
+    duration: float,
+    audio_features: list[dict] | None = None,
+) -> torch.Tensor:
     """Render all animation frames via OpenGL/GLSL and return a [N, H, W, 3] float32 tensor."""
     effect_name = _extract_effect_name(effect_params)
     if not isinstance(effect_params.get("params"), dict):
@@ -112,6 +147,7 @@ def _render_frames(image: torch.Tensor, effect_params: dict, fps: int, duration:
 
     source_frames, width, height, source_frame_count = _extract_input_image(image)
     frame_count = round(duration * fps)
+    resolved_audio_features = audio_features or []
 
     ctx = program = input_texture = output_renderbuffer = fbo = vbo = vao = None
     rendered_frames = []
@@ -143,6 +179,17 @@ def _render_frames(image: torch.Tensor, effect_params: dict, fps: int, duration:
                     program[uniform_name].value = float(uniform_value)
                 except KeyError:
                     continue
+            beat_value, rms_value = _resolve_audio_feature_frame(
+                resolved_audio_features, frame_index
+            )
+            try:
+                program["u_beat"].value = beat_value
+            except KeyError:
+                pass
+            try:
+                program["u_rms"].value = rms_value
+            except KeyError:
+                pass
             program["u_time"].value = frame_index / fps
             fbo.use()
             vao.render(moderngl.TRIANGLES)
@@ -261,6 +308,8 @@ class CoolVideoGenerator:
     def execute(self, image, fps, duration, effect_count=1, audio=None, **kwargs):
         from comfy_api.latest import InputImpl, Types  # type: ignore
 
+        audio_features = extract_audio_features(audio, fps=fps, duration=duration)
+
         # 1. Collect effect_params_1 … effect_params_N in order (up to effect_count)
         effect_params_list = []
         for i in range(1, effect_count + 1):
@@ -272,7 +321,13 @@ class CoolVideoGenerator:
         if effect_params_list:
             frames = image
             for effect_params in effect_params_list:
-                frames = _render_frames(frames, effect_params, fps, duration)
+                frames = _render_frames(
+                    frames,
+                    effect_params,
+                    fps,
+                    duration,
+                    audio_features=audio_features,
+                )
         else:
             frame_count = round(duration * fps)
             source = image if image.ndim == 4 else image.unsqueeze(0)

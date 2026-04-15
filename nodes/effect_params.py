@@ -17,6 +17,13 @@ DEFAULT_PARAMS: dict[str, dict] = {
         "u_pulse_amp": 0.06,
         "u_pulse_speed": 3.0,
     },
+    "beat_pulse": {
+        "u_pulse_intensity": 0.5,
+        "u_zoom_amount": 0.05,
+        "u_decay": 0.3,
+        "u_beat": 0.0,
+        "u_rms": 0.0,
+    },
     "water_drops": {
         "u_drop_density": 60,
         "u_drop_size": 0.08,
