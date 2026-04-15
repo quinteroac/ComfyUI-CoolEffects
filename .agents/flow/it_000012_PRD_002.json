@@ -1,0 +1,125 @@
+{
+  "goals": [
+    "Extend `extract_audio_features` to populate `bass`, `mid`, and `treble` float fields (replacing the stubs from PRD 001).",
+    "Deliver `CoolBassZoomEffect`: smooth zoom tied to sub-bass/bass energy.",
+    "Deliver `CoolFreqWarpEffect`: UV warp distortion tied to mid and treble energy.",
+    "Both nodes include WebGL2 live preview widgets with synthetic frequency signals."
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Frequency band extraction in audio_utils",
+      "description": "As a developer building frequency-driven effect nodes, I want `extract_audio_features` to return `bass`, `mid`, and `treble` float values per frame so that effect nodes can independently react to different spectral regions without re-implementing FFT logic.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "Each dict returned by `extract_audio_features` includes `bass` (float, 20–250 Hz energy, normalised to `[0.0, 1.0]`), `mid` (250–4000 Hz, normalised), and `treble` (4000–20000 Hz, normalised)."
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "Frequency band energies are computed via `numpy.fft.rfft` on each audio frame window; each band is the RMS of the magnitudes within that frequency range divided by the per-signal max for that band (so values are relative, not absolute)."
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "When `audio_tensor` is `None`, all three fields are `0.0` (consistent with existing graceful-degradation behaviour from PRD 001)."
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "The updated `extract_audio_features` remains backward-compatible: `rms` and `beat` fields continue to exist with the same semantics."
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "CoolBassZoomEffect node",
+      "description": "As a ComfyUI user, I want a `CoolBassZoomEffect` node that zooms the image proportionally to bass energy per frame so that low-frequency hits produce a visible zoom pulse in the rendered video.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "Node class `CoolBassZoomEffect` is registered with key `\"CoolBassZoomEffect\"` and display name `\"Cool Bass Zoom Effect\"`."
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "Node inputs: `zoom_strength` (FLOAT, default 0.3, min 0.0, max 1.0, step 0.01), `smoothing` (FLOAT, default 0.5, min 0.0, max 1.0, step 0.01)."
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "Node output: `EFFECT_PARAMS` built via `build_effect_params(\"bass_zoom\", {...})`."
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "`shaders/glsl/bass_zoom.frag` accepts `u_image`, `u_time`, `u_resolution` plus `u_bass`, `u_zoom_strength`, `u_smoothing`; implements UV zoom centred on `vec2(0.5)` scaled by `1.0 + bass * zoom_strength`."
+        },
+        {
+          "id": "US-002-AC05",
+          "text": "`CoolVideoGenerator` passes `u_bass` (float) per frame from the cached feature list."
+        },
+        {
+          "id": "US-002-AC06",
+          "text": "`web/bass_zoom_effect.js` mounts a live preview widget; when no audio is connected, the preview uses a synthetic bass pulse at ~60 BPM so the zoom effect is visually demonstrated."
+        },
+        {
+          "id": "US-002-AC07",
+          "text": "Node is registered and loaded in `__init__.py` without errors."
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "CoolFreqWarpEffect node",
+      "description": "As a ComfyUI user, I want a `CoolFreqWarpEffect` node that warps the image geometry based on mid and treble frequency energy so that harmonic and high-frequency content produce visible ripple distortion in the rendered video.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "Node class `CoolFreqWarpEffect` is registered with key `\"CoolFreqWarpEffect\"` and display name `\"Cool Freq Warp Effect\"`."
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "Node inputs: `warp_intensity` (FLOAT, default 0.4, min 0.0, max 1.0, step 0.01), `warp_frequency` (FLOAT, default 8.0, min 1.0, max 32.0, step 0.5 — controls the spatial frequency of the warp wave), `mid_weight` (FLOAT, default 0.6, min 0.0, max 1.0, step 0.01), `treble_weight` (FLOAT, default 0.4, min 0.0, max 1.0, step 0.01)."
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "Node output: `EFFECT_PARAMS` built via `build_effect_params(\"freq_warp\", {...})`."
+        },
+        {
+          "id": "US-003-AC04",
+          "text": "`shaders/glsl/freq_warp.frag` accepts `u_image`, `u_time`, `u_resolution` plus `u_mid`, `u_treble`, `u_warp_intensity`, `u_warp_frequency`, `u_mid_weight`, `u_treble_weight`; distorts UV coordinates using `sin(uv.y * warp_frequency + u_time) * combined_energy * warp_intensity` on the x-axis and a complementary distortion on y."
+        },
+        {
+          "id": "US-003-AC05",
+          "text": "`CoolVideoGenerator` passes `u_mid` and `u_treble` per frame from the cached feature list."
+        },
+        {
+          "id": "US-003-AC06",
+          "text": "`web/freq_warp_effect.js` mounts a live preview widget; when no audio is connected, the preview drives `u_mid` and `u_treble` from `sin(u_time * 2.0)` and `cos(u_time * 3.5)` respectively so the warp is continuously visible."
+        },
+        {
+          "id": "US-003-AC07",
+          "text": "Node is registered and loaded in `__init__.py` without errors."
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "FFT window size per frame is `ceil(sample_rate / fps)` samples, consistent with the beat detection window from PRD 001."
+    },
+    {
+      "id": "FR-2",
+      "description": "Per-band normalisation uses the maximum band energy across all frames of the clip (computed in a single pass before the render loop) to ensure values stay in `[0.0, 1.0]`."
+    },
+    {
+      "id": "FR-3",
+      "description": "`CoolVideoGenerator` must pass `u_bass`, `u_mid`, and `u_treble` to all effect shaders that declare those uniforms; shaders that do not declare them are unaffected (ModernGL ignores unknown uniform assignments)."
+    },
+    {
+      "id": "FR-4",
+      "description": "`smoothing` in `CoolBassZoomEffect` is applied as an exponential moving average on the `bass` signal before passing to the shader: `smoothed = prev * smoothing + current * (1 - smoothing)`."
+    },
+    {
+      "id": "FR-5",
+      "description": "Both shaders must handle `u_bass = 0.0`, `u_mid = 0.0`, `u_treble = 0.0` gracefully (no visual artefact — the image must pass through unchanged)."
+    }
+  ]
+}
