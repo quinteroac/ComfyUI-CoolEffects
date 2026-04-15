@@ -1,0 +1,37 @@
+{
+  "entries": [
+    {
+      "use_case_id": "US-001",
+      "status": "pending",
+      "attempt_count": 0,
+      "last_agent_exit_code": null,
+      "quality_checks": [],
+      "last_error_summary": "",
+      "updated_at": "2026-04-15T19:05:53.048Z",
+      "audit_artifact_path": ".agents/flow/it_000012_audit.json",
+      "refactor_report_path": ".agents/flow/it_000012_refactor-report.md"
+    },
+    {
+      "use_case_id": "US-002",
+      "status": "pending",
+      "attempt_count": 0,
+      "last_agent_exit_code": null,
+      "quality_checks": [],
+      "last_error_summary": "",
+      "updated_at": "2026-04-15T19:05:53.048Z",
+      "audit_artifact_path": ".agents/flow/it_000012_audit.json",
+      "refactor_report_path": ".agents/flow/it_000012_refactor-report.md"
+    },
+    {
+      "use_case_id": "US-003",
+      "status": "pending",
+      "attempt_count": 0,
+      "last_agent_exit_code": null,
+      "quality_checks": [],
+      "last_error_summary": "",
+      "updated_at": "2026-04-15T19:05:53.048Z",
+      "audit_artifact_path": ".agents/flow/it_000012_audit.json",
+      "refactor_report_path": ".agents/flow/it_000012_refactor-report.md"
+    }
+  ]
+}
