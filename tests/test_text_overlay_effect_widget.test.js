@@ -1,10 +1,14 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 
 import {
+    PRETEXT_CDN_URL,
+    PRETEXT_VENDOR_URL,
+    load_pretext_rich_inline_module,
     normalize_overlay_fragments,
     patch_preview_widget_callbacks,
     render_overlay_text,
     render_preview_frame,
+    set_pretext_dynamic_import_for_tests,
     update_preview_layout,
 } from "../web/text_overlay_effect.js";
 
@@ -73,6 +77,24 @@ function create_mock_canvas_context() {
 }
 
 describe("CoolTextOverlay widget preview", () => {
+    test("US-002-AC01: pretext rich-inline module loads from CDN with vendor fallback", async () => {
+        const attempted = [];
+        const fake_module = { prepareRichInline() {} };
+        const loaded = await load_pretext_rich_inline_module(async (source_url) => {
+            attempted.push(source_url);
+            if (source_url === PRETEXT_CDN_URL) {
+                throw new Error("cdn unavailable");
+            }
+            if (source_url === PRETEXT_VENDOR_URL) {
+                return fake_module;
+            }
+            throw new Error(`Unexpected import URL: ${source_url}`);
+        });
+
+        expect(loaded).toBe(fake_module);
+        expect(attempted).toEqual([PRETEXT_CDN_URL, PRETEXT_VENDOR_URL]);
+    });
+
     test("US-001-AC01: renders first video frame as preview background", () => {
         const node = create_mock_node();
         const { ctx, calls } = create_mock_canvas_context();
@@ -179,4 +201,59 @@ describe("CoolTextOverlay widget preview", () => {
         expect(fragments).toHaveLength(1);
         expect(fragments[0].text).toBe("Fallback");
     });
+
+    test("US-002-AC02/AC03/AC04: prepareRichInline widths drive centered fragment layout", async () => {
+        const prepare_calls = [];
+        set_pretext_dynamic_import_for_tests(async (source_url) => {
+            if (source_url !== PRETEXT_CDN_URL) {
+                throw new Error("expected CDN URL first");
+            }
+            return {
+                prepareRichInline(specs, context) {
+                    prepare_calls.push({ specs, context });
+                    return { specs };
+                },
+                layoutNextRichInlineLineRange(prepared) {
+                    return {
+                        fragments: prepared.specs.map((item) => ({
+                            occupiedWidth: item.text === "AA" ? 50 : 30,
+                        })),
+                    };
+                },
+            };
+        });
+
+        const { ctx, calls } = create_mock_canvas_context();
+        const canvas = { width: 200, height: 100, style: {} };
+        const node = create_mock_node({
+            align: "center",
+            pos_x: 0.5,
+            pos_y: 0.5,
+            fragments: '[{"text":"AA","color":"#ff0000"},{"text":"B","color":"#00ff00"}]',
+        });
+        const state = {
+            node,
+            canvas_element: canvas,
+            context: ctx,
+            status_element: { textContent: "" },
+            video_element: { readyState: 4, videoWidth: 200, videoHeight: 100 },
+        };
+
+        await load_pretext_rich_inline_module();
+        render_overlay_text(state);
+
+        expect(prepare_calls).toHaveLength(1);
+        expect(prepare_calls[0].specs).toEqual([
+            { text: "AA", font: "normal 48px arial" },
+            { text: "B", font: "normal 48px arial" },
+        ]);
+        expect(prepare_calls[0].context).toBe(ctx);
+        expect(calls.fillText).toHaveLength(2);
+        expect(calls.fillText[0].x).toBe(60);
+        expect(calls.fillText[1].x).toBe(110);
+    });
+});
+
+afterEach(() => {
+    set_pretext_dynamic_import_for_tests(null);
 });

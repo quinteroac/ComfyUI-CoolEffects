@@ -20,8 +20,25 @@ const VIDEO_OUTPUT_BY_NODE_ID = new Map();
 const NODE_STATES = new Map();
 const INPUT_TYPE = 1;
 const VIDEO_INPUT_NAME = "video";
+export const PRETEXT_CDN_URL = "https://esm.sh/@chenglou/pretext/rich-inline";
+export const PRETEXT_VENDOR_URL = new URL("./vendor/pretext-rich-inline.mjs", import.meta.url).href;
+const PRETEXT_IMPORT_CANDIDATES = [PRETEXT_CDN_URL, PRETEXT_VENDOR_URL];
 let EXECUTED_HANDLER = null;
 let EXECUTED_API = null;
+let PRETEXT_IMPORT_PROMISE = null;
+let PRETEXT_MODULE_CACHE = null;
+let PRETEXT_DYNAMIC_IMPORT = null;
+
+function default_dynamic_import(url) {
+    return import(url);
+}
+
+function get_dynamic_importer() {
+    if (typeof PRETEXT_DYNAMIC_IMPORT === "function") {
+        return PRETEXT_DYNAMIC_IMPORT;
+    }
+    return default_dynamic_import;
+}
 
 function normalize_node_id(value) {
     if (value === null || value === undefined) {
@@ -153,6 +170,135 @@ function parse_color(value, fallback) {
     return fallback;
 }
 
+function to_canvas_font(fragment) {
+    return `${fragment.font_weight} ${fragment.font_size}px ${fragment.font_family}`;
+}
+
+function build_rich_inline_specs(fragments) {
+    return fragments.map((fragment) => ({
+        text: fragment.text,
+        font: to_canvas_font(fragment),
+    }));
+}
+
+async function import_pretext_module(dynamic_importer) {
+    let last_error = null;
+    for (const source_url of PRETEXT_IMPORT_CANDIDATES) {
+        try {
+            return await dynamic_importer(source_url);
+        } catch (error) {
+            last_error = error;
+        }
+    }
+    throw last_error ?? new Error("Failed to import pretext rich-inline module");
+}
+
+export async function load_pretext_rich_inline_module(dynamic_importer = get_dynamic_importer()) {
+    const use_cache = dynamic_importer === get_dynamic_importer();
+    if (use_cache && PRETEXT_MODULE_CACHE) {
+        return PRETEXT_MODULE_CACHE;
+    }
+    if (use_cache && PRETEXT_IMPORT_PROMISE) {
+        return PRETEXT_IMPORT_PROMISE;
+    }
+
+    const load_promise = import_pretext_module(dynamic_importer)
+        .then((module_ref) => {
+            const module_obj = module_ref?.default ?? module_ref;
+            if (use_cache) {
+                PRETEXT_MODULE_CACHE = module_obj;
+            }
+            return module_obj;
+        })
+        .finally(() => {
+            if (use_cache) {
+                PRETEXT_IMPORT_PROMISE = null;
+            }
+        });
+    if (use_cache) {
+        PRETEXT_IMPORT_PROMISE = load_promise;
+    }
+    return load_promise;
+}
+
+function measure_rich_inline_widths_with_pretext_module(pretext_module, fragments, context) {
+    if (
+        typeof pretext_module?.prepareRichInline !== "function" ||
+        typeof pretext_module?.layoutNextRichInlineLineRange !== "function"
+    ) {
+        throw new Error("Pretext rich-inline API is unavailable");
+    }
+    const specs = build_rich_inline_specs(fragments);
+    const prepared = pretext_module.prepareRichInline(specs, context);
+    const line_range = pretext_module.layoutNextRichInlineLineRange(prepared, Number.POSITIVE_INFINITY);
+    if (!line_range || !Array.isArray(line_range.fragments)) {
+        return null;
+    }
+    return line_range.fragments.map((entry) => {
+        const occupied_width = Number(entry?.occupiedWidth);
+        return Number.isFinite(occupied_width) ? Math.max(0, occupied_width) : 0;
+    });
+}
+
+export async function measure_rich_inline_widths_with_pretext(fragments, context) {
+    const pretext_module = await load_pretext_rich_inline_module();
+    return measure_rich_inline_widths_with_pretext_module(pretext_module, fragments, context);
+}
+
+function get_fragment_layout_key(fragments) {
+    return JSON.stringify(
+        fragments.map((fragment) => ({
+            text: fragment.text,
+            font_size: fragment.font_size,
+            font_family: fragment.font_family,
+            font_weight: fragment.font_weight,
+            color: fragment.color,
+        })),
+    );
+}
+
+function request_pretext_fragment_widths(state, fragments, context) {
+    if (!state) {
+        return null;
+    }
+    const layout_key = get_fragment_layout_key(fragments);
+    state.pretext_widths_by_key = state.pretext_widths_by_key ?? new Map();
+    state.pretext_requests_by_key = state.pretext_requests_by_key ?? new Map();
+    if (state.pretext_widths_by_key.has(layout_key)) {
+        return state.pretext_widths_by_key.get(layout_key);
+    }
+    if (state.pretext_requests_by_key.has(layout_key)) {
+        return null;
+    }
+    if (PRETEXT_MODULE_CACHE) {
+        try {
+            const widths = measure_rich_inline_widths_with_pretext_module(PRETEXT_MODULE_CACHE, fragments, context);
+            if (Array.isArray(widths) && widths.length === fragments.length) {
+                state.pretext_widths_by_key.set(layout_key, widths);
+                return widths;
+            }
+        } catch (_error) {
+            // Continue with async request fallback.
+        }
+    }
+
+    const request = measure_rich_inline_widths_with_pretext(fragments, context)
+        .then((widths) => {
+            if (Array.isArray(widths) && widths.length === fragments.length) {
+                state.pretext_widths_by_key.set(layout_key, widths);
+            }
+        })
+        .catch(() => {
+            // Keep canvas fallback widths if pretext cannot load.
+        })
+        .finally(() => {
+            state.pretext_requests_by_key.delete(layout_key);
+            render_preview_frame(state);
+        });
+    state.pretext_requests_by_key.set(layout_key, request);
+    return null;
+}
+
 export function normalize_overlay_fragments(node) {
     const default_fragment = {
         text: widget_string(node, "text", "Cool Text"),
@@ -225,8 +371,15 @@ export function render_overlay_text(state) {
     const anchor_x = clamp(widget_number(node, "pos_x", 0.5), 0.0, 1.0) * width;
     const baseline_y = clamp(widget_number(node, "pos_y", 0.1), 0.0, 1.0) * height;
 
-    const widths = fragments.map((fragment) => {
-        context.font = `${fragment.font_weight} ${fragment.font_size}px ${fragment.font_family}`;
+    const pretext_widths = request_pretext_fragment_widths(state, fragments, context);
+    const widths = fragments.map((fragment, index) => {
+        if (Array.isArray(pretext_widths)) {
+            const pretext_width = Number(pretext_widths[index]);
+            if (Number.isFinite(pretext_width)) {
+                return Math.max(0, pretext_width);
+            }
+        }
+        context.font = to_canvas_font(fragment);
         return Number(context.measureText(fragment.text)?.width ?? 0);
     });
     const total_width = widths.reduce((acc, value) => acc + value, 0);
@@ -243,7 +396,7 @@ export function render_overlay_text(state) {
     context.textBaseline = "alphabetic";
     for (let index = 0; index < fragments.length; index++) {
         const fragment = fragments[index];
-        context.font = `${fragment.font_weight} ${fragment.font_size}px ${fragment.font_family}`;
+        context.font = to_canvas_font(fragment);
         context.fillStyle = fragment.color;
         context.fillText(fragment.text, cursor_x, baseline_y);
         cursor_x += widths[index];
@@ -604,6 +757,12 @@ export async function auto_register_comfy_extension() {
     if (app_ref) {
         register_comfy_extension(app_ref);
     }
+}
+
+export function set_pretext_dynamic_import_for_tests(import_fn) {
+    PRETEXT_DYNAMIC_IMPORT = typeof import_fn === "function" ? import_fn : null;
+    PRETEXT_IMPORT_PROMISE = null;
+    PRETEXT_MODULE_CACHE = null;
 }
 
 void auto_register_comfy_extension();
