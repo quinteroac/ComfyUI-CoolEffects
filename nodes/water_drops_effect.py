@@ -44,6 +44,10 @@ class CoolWaterDropsEffect:
                     "FLOAT",
                     {"default": 0.0, "min": -2.0, "max": 2.0, "step": 0.1},
                 ),
+                "blur": (
+                    "FLOAT",
+                    {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.1},
+                ),
             }
         }
 
@@ -60,6 +64,7 @@ class CoolWaterDropsEffect:
         refraction_strength,
         gravity,
         wind,
+        blur,
     ):
         return (
             build_effect_params(
@@ -71,6 +76,7 @@ class CoolWaterDropsEffect:
                     "u_refraction_strength": refraction_strength,
                     "u_gravity": gravity,
                     "u_wind": wind,
+                    "u_blur": blur,
                 },
             ),
         )

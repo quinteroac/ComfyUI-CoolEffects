@@ -37,6 +37,11 @@ const WATER_DROPS_PARAM_SPECS = Object.freeze([
         uniform_name: "u_wind",
         default_value: 0.0,
     }),
+    Object.freeze({
+        widget_name: "blur",
+        uniform_name: "u_blur",
+        default_value: 1.0,
+    }),
 ]);
 
 export async function mount_water_drops_effect_widget_for_node({

@@ -46,6 +46,10 @@ def test_water_drops_input_types_expose_all_numeric_controls_with_ranges():
         "FLOAT",
         {"default": 0.0, "min": -2.0, "max": 2.0, "step": 0.1},
     )
+    assert required_inputs["blur"] == (
+        "FLOAT",
+        {"default": 1.0, "min": 0.0, "max": 2.0, "step": 0.1},
+    )
 
 
 def test_water_drops_node_declares_effect_params_output_contract():
@@ -66,6 +70,7 @@ def test_water_drops_execute_returns_water_drops_effect_params_bundle():
         refraction_strength=0.5,
         gravity=1.4,
         wind=-0.6,
+        blur=1.2,
     )
 
     assert output == {
@@ -77,6 +82,7 @@ def test_water_drops_execute_returns_water_drops_effect_params_bundle():
             "u_refraction_strength": 0.5,
             "u_gravity": 1.4,
             "u_wind": -0.6,
+            "u_blur": 1.2,
         },
     }
 
@@ -92,6 +98,7 @@ def test_water_drops_execute_signature_matches_all_controls():
         "refraction_strength",
         "gravity",
         "wind",
+        "blur",
     ]
 
 
