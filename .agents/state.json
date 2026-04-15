@@ -1,27 +1,16 @@
 {
-  "current_iteration": "000011",
+  "current_iteration": "000012",
   "current_phase": "define",
   "phases": {
     "define": {
       "ideation": {
-        "status": "completed",
+        "status": "pending",
         "file": null
       },
-      "requirement_definition": [
-        {
-          "index": 1,
-          "status": "approved",
-          "file": "it_000011_product-requirement-document_001.md"
-        },
-        {
-          "index": 2,
-          "status": "approved",
-          "file": "it_000011_product-requirement-document_002.md"
-        }
-      ],
+      "requirement_definition": [],
       "prd_generation": {
-        "status": "completed",
-        "file": "it_000011_PRD_002.json"
+        "status": "pending",
+        "file": null
       }
     },
     "prototype": {
@@ -73,6 +62,5 @@
       }
     }
   },
-  "last_updated": "2026-04-15T03:24:47.894Z",
-  "updated_by": "nvst:approve-requirement"
+  "last_updated": "2026-04-15T18:41:50.825Z"
 }

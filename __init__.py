@@ -94,12 +94,6 @@ _video_player_module = _load_module_from_path(
 )
 CoolVideoPlayer = _video_player_module.CoolVideoPlayer
 
-_text_overlay_module = _load_module_from_path(
-    "cool_effects_text_overlay_runtime",
-    PACKAGE_ROOT / "nodes" / "text_overlay_effect.py",
-)
-CoolTextOverlay = _text_overlay_module.CoolTextOverlay
-
 _video_generator_import_error = None
 try:
     _video_generator_module = _load_module_from_path(
@@ -126,7 +120,6 @@ NODE_CLASS_MAPPINGS = {
     "CoolPanDownEffect": CoolPanDownEffect,
     "CoolPanDiagonalEffect": CoolPanDiagonalEffect,
     "CoolVideoPlayer": CoolVideoPlayer,
-    "CoolTextOverlay": CoolTextOverlay,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
     "CoolEffectSelector": "Cool Effect Selector",
@@ -141,7 +134,6 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CoolPanDownEffect": "Cool Pan Down Effect",
     "CoolPanDiagonalEffect": "Cool Pan Diagonal Effect",
     "CoolVideoPlayer": "Cool Video Player",
-    "CoolTextOverlay": "Cool Text Overlay",
 }
 
 if CoolVideoGenerator is not None:

@@ -18,7 +18,7 @@
 - Key libraries: `moderngl`, `torch`, `numpy`, `aiohttp` (ComfyUI's PromptServer), `comfy_api.latest` (VIDEO assembly)
 - Package manager: `pip` / `requirements.txt` (Python); no bundler for JS — plain ES modules
 - Build / tooling: No build step; JS loaded as native ES modules through ComfyUI's extension system
-- JS tests: `bun` runner (`tests/bun-smoke.test.js`)
+
 
 ## Code Standards
 - Python style: PEP 8; paths resolved with `Path(__file__).resolve().parent` (never relative to CWD)
@@ -29,10 +29,8 @@
 - EFFECT_PARAMS custom type: `{"effect_name": str, "params": dict}` — built by `build_effect_params()`, merged by `merge_params()`
 
 ## Testing Strategy
-- Approach: critical-paths only (no TDD mandate in PRDs)
-- Runner: `pytest` (Python), `bun` (JavaScript smoke tests)
-- Coverage targets: shader loader (`load_shader`, `load_vertex_shader`, `list_shaders`), tensor shape/dtype assertions, effect node EFFECT_PARAMS contract
-- Test location convention: `tests/` at package root
+- Approach: manual testing only — run ComfyUI and verify node behavior directly in the UI
+- No automated test suite; `tests/` directory removed
 
 ## Product Architecture
 - ComfyUI-CoolEffects is a custom node package that applies GLSL effects to images and produces videos
