@@ -15,6 +15,24 @@ def _default_feature_frame() -> dict[str, float | bool]:
     }
 
 
+def _resolve_sample_rate(audio_tensor, mono_audio: np.ndarray, duration: float) -> float:
+    if isinstance(audio_tensor, dict):
+        for key in ("sample_rate", "sampling_rate", "samplerate"):
+            value = audio_tensor.get(key)
+            if value is None:
+                continue
+            sample_rate = float(value)
+            if np.isfinite(sample_rate) and sample_rate > 0.0:
+                return sample_rate
+
+    if duration > 0.0 and mono_audio.size > 0:
+        inferred_rate = float(mono_audio.shape[0]) / float(duration)
+        if np.isfinite(inferred_rate) and inferred_rate > 0.0:
+            return inferred_rate
+
+    return 44_100.0
+
+
 def _coerce_audio_to_mono(audio_tensor) -> np.ndarray:
     if isinstance(audio_tensor, dict):
         if "waveform" in audio_tensor:
@@ -96,6 +114,50 @@ def _detect_beats_energy_spike(rms_values: np.ndarray, fps: int) -> np.ndarray:
     return beat_flags
 
 
+def _rms_magnitude_in_band(
+    magnitudes: np.ndarray, frequencies: np.ndarray, low_hz: float, high_hz: float
+) -> float:
+    mask = (frequencies >= low_hz) & (frequencies < high_hz)
+    if not np.any(mask):
+        return 0.0
+    band_magnitudes = magnitudes[mask]
+    return float(np.sqrt(np.mean(band_magnitudes * band_magnitudes)))
+
+
+def _compute_frequency_band_rms_per_frame(
+    mono_audio: np.ndarray, frame_count: int, sample_rate: float
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    frame_edges = np.linspace(0, mono_audio.shape[0], frame_count + 1, dtype=np.int64)
+    bass_values = np.zeros((frame_count,), dtype=np.float32)
+    mid_values = np.zeros((frame_count,), dtype=np.float32)
+    treble_values = np.zeros((frame_count,), dtype=np.float32)
+
+    for index in range(frame_count):
+        start = int(frame_edges[index])
+        end = int(frame_edges[index + 1])
+        if end <= start:
+            continue
+        segment = mono_audio[start:end]
+        if segment.size == 0:
+            continue
+
+        magnitudes = np.abs(np.fft.rfft(segment))
+        frequencies = np.fft.rfftfreq(segment.size, d=1.0 / sample_rate)
+
+        bass_values[index] = _rms_magnitude_in_band(magnitudes, frequencies, 20.0, 250.0)
+        mid_values[index] = _rms_magnitude_in_band(magnitudes, frequencies, 250.0, 4000.0)
+        treble_values[index] = _rms_magnitude_in_band(magnitudes, frequencies, 4000.0, 20000.01)
+
+    return bass_values, mid_values, treble_values
+
+
+def _normalize_per_signal(values: np.ndarray) -> np.ndarray:
+    max_value = float(np.max(values)) if values.size > 0 else 0.0
+    if max_value <= 0.0:
+        return np.zeros_like(values, dtype=np.float32)
+    return np.clip(values / max_value, 0.0, 1.0).astype(np.float32, copy=False)
+
+
 def extract_audio_features(audio_tensor, fps, duration) -> list[dict]:
     frame_count = round(float(duration) * float(fps))
     if frame_count < 0:
@@ -110,8 +172,15 @@ def extract_audio_features(audio_tensor, fps, duration) -> list[dict]:
     if mono_audio.size == 0:
         return [_default_feature_frame() for _ in range(frame_count)]
 
+    sample_rate = _resolve_sample_rate(audio_tensor, mono_audio, float(duration))
     rms_values = _compute_rms_per_frame(mono_audio, frame_count)
     beat_flags = _detect_beats_energy_spike(rms_values, int(fps))
+    bass_raw, mid_raw, treble_raw = _compute_frequency_band_rms_per_frame(
+        mono_audio, frame_count, sample_rate
+    )
+    bass_values = _normalize_per_signal(bass_raw)
+    mid_values = _normalize_per_signal(mid_raw)
+    treble_values = _normalize_per_signal(treble_raw)
 
     features: list[dict] = []
     for index in range(frame_count):
@@ -119,9 +188,9 @@ def extract_audio_features(audio_tensor, fps, duration) -> list[dict]:
             {
                 "rms": float(rms_values[index]),
                 "beat": bool(beat_flags[index]),
-                "bass": 0.0,
-                "mid": 0.0,
-                "treble": 0.0,
+                "bass": float(bass_values[index]),
+                "mid": float(mid_values[index]),
+                "treble": float(treble_values[index]),
             }
         )
     return features

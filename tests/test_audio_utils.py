@@ -1,6 +1,7 @@
 import ast
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 
@@ -38,13 +39,60 @@ class TestAudioUtils(unittest.TestCase):
             self.assertGreaterEqual(feature["rms"], 0.0)
             self.assertLessEqual(feature["rms"], 1.0)
             self.assertIsInstance(feature["beat"], bool)
-            self.assertEqual(feature["bass"], 0.0)
-            self.assertEqual(feature["mid"], 0.0)
-            self.assertEqual(feature["treble"], 0.0)
+            self.assertIsInstance(feature["bass"], float)
+            self.assertIsInstance(feature["mid"], float)
+            self.assertIsInstance(feature["treble"], float)
+            self.assertGreaterEqual(feature["bass"], 0.0)
+            self.assertLessEqual(feature["bass"], 1.0)
+            self.assertGreaterEqual(feature["mid"], 0.0)
+            self.assertLessEqual(feature["mid"], 1.0)
+            self.assertGreaterEqual(feature["treble"], 0.0)
+            self.assertLessEqual(feature["treble"], 1.0)
             if feature["beat"]:
                 beat_frames.append(index)
 
         self.assertIn(spike_frame, beat_frames)
+
+    def test_extract_audio_features_frequency_bands_use_rfft_and_normalize_per_band(self):
+        fps = 4
+        duration = 1.0
+        sample_rate = 48000
+        samples_per_frame = int(sample_rate / fps)
+
+        t = np.arange(samples_per_frame, dtype=np.float32) / float(sample_rate)
+        frame_bass_loud = np.sin(2.0 * np.pi * 120.0 * t)
+        frame_bass_quiet = 0.5 * np.sin(2.0 * np.pi * 120.0 * t)
+        frame_mid = np.sin(2.0 * np.pi * 900.0 * t)
+        frame_treble = np.sin(2.0 * np.pi * 8100.0 * t)
+        audio = np.concatenate(
+            [frame_bass_loud, frame_bass_quiet, frame_mid, frame_treble]
+        ).astype(np.float32)
+
+        with mock.patch("nodes.audio_utils.np.fft.rfft", wraps=np.fft.rfft) as rfft_mock:
+            features = extract_audio_features(
+                {"samples": audio, "sample_rate": sample_rate},
+                fps=fps,
+                duration=duration,
+            )
+
+        self.assertGreaterEqual(rfft_mock.call_count, round(duration * fps))
+        self.assertEqual(len(features), round(duration * fps))
+
+        self.assertGreater(features[0]["bass"], 0.95)
+        self.assertGreater(features[1]["bass"], 0.45)
+        self.assertLess(features[1]["bass"], 0.55)
+        self.assertLess(features[2]["bass"], 0.05)
+        self.assertLess(features[3]["bass"], 0.05)
+
+        self.assertLess(features[0]["mid"], 0.05)
+        self.assertLess(features[1]["mid"], 0.05)
+        self.assertGreater(features[2]["mid"], 0.95)
+        self.assertLess(features[3]["mid"], 0.05)
+
+        self.assertLess(features[0]["treble"], 0.05)
+        self.assertLess(features[1]["treble"], 0.05)
+        self.assertLess(features[2]["treble"], 0.05)
+        self.assertGreater(features[3]["treble"], 0.95)
 
     def test_extract_audio_features_handles_none_audio(self):
         fps = 24
