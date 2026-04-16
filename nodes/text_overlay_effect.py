@@ -48,6 +48,13 @@ _POSITION_OPTIONS = [
     "bottom-center",
     "bottom-right",
 ]
+_ANIMATION_OPTIONS = [
+    "none",
+    "fade_in",
+    "fade_in_out",
+    "slide_up",
+    "typewriter",
+]
 
 
 class CoolTextOverlayEffect:
@@ -65,6 +72,11 @@ class CoolTextOverlayEffect:
                 "position": (_POSITION_OPTIONS, {"default": "bottom-center"}),
                 "offset_x": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 1.0, "step": 0.01}),
                 "offset_y": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 1.0, "step": 0.01}),
+                "animation": (_ANIMATION_OPTIONS, {"default": "fade_in"}),
+                "animation_duration": (
+                    "FLOAT",
+                    {"default": 0.5, "min": 0.0, "max": 5.0, "step": 0.01},
+                ),
             }
         }
 
@@ -85,6 +97,8 @@ class CoolTextOverlayEffect:
         position,
         offset_x,
         offset_y,
+        animation,
+        animation_duration,
     ):
         return (
             build_effect_params(
@@ -100,6 +114,8 @@ class CoolTextOverlayEffect:
                     "position": position,
                     "offset_x": offset_x,
                     "offset_y": offset_y,
+                    "animation": animation,
+                    "animation_duration": animation_duration,
                 },
             ),
         )

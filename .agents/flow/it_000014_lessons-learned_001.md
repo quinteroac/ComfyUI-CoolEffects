@@ -19,3 +19,13 @@
 **Pitfalls Encountered:** The repository had no existing text-overlay frontend extension or shader, so preview AC coverage required adding both in this story rather than only tweaking Python inputs.
 
 **Useful Context for Future Agents:** `effect_node_widget.js` only auto-applies numeric widget uniforms, so COMBO widgets like `position` must be handled explicitly in `onWidgetChanged`. The text-overlay preview currently renders a text-block proxy rectangle; future stories can swap this for a true text texture path while keeping the anchor/offset uniform contract.
+
+## US-003 — Animate the text
+
+**Summary:** Added text animation controls to `CoolTextOverlayEffect` (`animation`, `animation_duration`), implemented animation-aware text overlay rendering in `video_generator.py` with Pillow-backed text textures, and updated the text overlay shader/WebGL widget to support fade, fade-in-out, slide-up, and typewriter behavior.
+
+**Key Decisions:** Implemented a dedicated `text_overlay` rendering path in `video_generator.py` so Pillow text textures can be uploaded as `u_text_texture` while preserving the existing generic effect pipeline for all other shaders. Kept typewriter as the only per-frame texture regeneration path and drove timing via shared `u_time`/`u_duration` uniforms.
+
+**Pitfalls Encountered:** The existing text overlay shader was a proxy rounded rectangle with no text texture sampler, so backend and preview needed a compatibility bridge. Solved by adding `u_has_text_texture` and keeping the proxy shape path for preview while using true text texture alpha in backend rendering.
+
+**Useful Context for Future Agents:** Text overlay font resolution is strict (`assets/fonts/<font_name>`), and animation mode is mapped numerically (`none=0`, `fade_in=1`, `fade_in_out=2`, `slide_up=3`, `typewriter=4`) consistently across Python (`video_generator.py`) and JS (`web/text_overlay_effect.js`).

@@ -85,6 +85,14 @@ def test_text_overlay_inputs_cover_appearance_controls():
         "FLOAT",
         {"default": 0.0, "min": -1.0, "max": 1.0, "step": 0.01},
     )
+    assert required_inputs["animation"] == (
+        ["none", "fade_in", "fade_in_out", "slide_up", "typewriter"],
+        {"default": "fade_in"},
+    )
+    assert required_inputs["animation_duration"] == (
+        "FLOAT",
+        {"default": 0.5, "min": 0.0, "max": 5.0, "step": 0.01},
+    )
 
 
 def test_execute_outputs_position_and_offsets():
@@ -105,12 +113,16 @@ def test_execute_outputs_position_and_offsets():
         position="top-right",
         offset_x=0.25,
         offset_y=-0.15,
+        animation="fade_in_out",
+        animation_duration=1.2,
     )
 
     assert effect_params["effect_name"] == "text_overlay"
     assert effect_params["params"]["position"] == "top-right"
     assert effect_params["params"]["offset_x"] == 0.25
     assert effect_params["params"]["offset_y"] == -0.15
+    assert effect_params["params"]["animation"] == "fade_in_out"
+    assert effect_params["params"]["animation_duration"] == 1.2
 
 
 def test_font_combo_uses_alphabetical_ttf_scan_order(tmp_path: Path):

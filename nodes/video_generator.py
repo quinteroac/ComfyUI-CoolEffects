@@ -69,6 +69,24 @@ _FULLSCREEN_QUAD_VERTICES = np.array(
     dtype="f4",
 )
 
+_TEXT_POSITION_ANCHORS: dict[str, tuple[float, float]] = {
+    "top-left": (0.12, 0.88),
+    "top-center": (0.5, 0.88),
+    "top-right": (0.88, 0.88),
+    "center": (0.5, 0.5),
+    "bottom-left": (0.12, 0.12),
+    "bottom-center": (0.5, 0.12),
+    "bottom-right": (0.88, 0.12),
+}
+
+_TEXT_ANIMATION_MODES: dict[str, int] = {
+    "none": 0,
+    "fade_in": 1,
+    "fade_in_out": 2,
+    "slide_up": 3,
+    "typewriter": 4,
+}
+
 # ---------------------------------------------------------------------------
 # Frame-rendering helpers
 # ---------------------------------------------------------------------------
@@ -188,6 +206,228 @@ def _set_program_uniform(program, uniform_name: str, uniform_value) -> None:
     raise ValueError(f"Unsupported uniform type for '{uniform_name}': {type(uniform_value).__name__}")
 
 
+def _resolve_frame_time_seconds(frame_index: int, fps: int) -> float:
+    if fps <= 0:
+        raise ValueError("fps must be greater than zero")
+    if frame_index < 0:
+        raise ValueError("frame_index must be non-negative")
+    return frame_index / fps
+
+
+def _resolve_timing_uniforms(frame_index: int, fps: int, duration: float) -> dict[str, float]:
+    return {"u_time": _resolve_frame_time_seconds(frame_index, fps), "u_duration": float(duration)}
+
+
+def _resolve_text_animation_mode(animation: str) -> int:
+    return _TEXT_ANIMATION_MODES.get(animation, _TEXT_ANIMATION_MODES["fade_in"])
+
+
+def _resolve_text_animation_progress(time_seconds: float, animation_duration: float) -> float:
+    if animation_duration <= 0.0:
+        return 1.0
+    return float(np.clip(time_seconds / animation_duration, 0.0, 1.0))
+
+
+def _resolve_typewriter_visible_text(text: str, time_seconds: float, animation_duration: float) -> str:
+    if not text:
+        return ""
+    if animation_duration <= 0.0:
+        return text
+    progress = _resolve_text_animation_progress(time_seconds, animation_duration)
+    visible_count = int(np.ceil(progress * len(text)))
+    return text[: int(np.clip(visible_count, 0, len(text)))]
+
+
+def _resolve_text_overlay_anchor(position: str) -> tuple[float, float]:
+    return _TEXT_POSITION_ANCHORS.get(position, _TEXT_POSITION_ANCHORS["bottom-center"])
+
+
+def _load_text_overlay_font(font_name: str, font_size: int):
+    try:
+        from PIL import ImageFont
+    except ImportError as error:
+        raise ValueError("Pillow is required for the text_overlay effect.") from error
+
+    font_path = Path(__file__).resolve().parent.parent / "assets" / "fonts" / font_name
+    if not font_path.is_file():
+        raise ValueError(f"Font not found for text_overlay effect: {font_name}")
+    try:
+        return ImageFont.truetype(str(font_path), font_size)
+    except OSError as error:
+        raise ValueError(f"Unable to load font for text_overlay effect: {font_name}") from error
+
+
+def _render_text_overlay_texture_array(
+    width: int,
+    height: int,
+    text: str,
+    font,
+    anchor: tuple[float, float],
+    offset_x: float,
+    offset_y: float,
+) -> np.ndarray:
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError as error:
+        raise ValueError("Pillow is required for the text_overlay effect.") from error
+
+    text_canvas = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    if text:
+        draw = ImageDraw.Draw(text_canvas)
+        text_box = draw.textbbox((0, 0), text, font=font)
+        text_width = max(0, text_box[2] - text_box[0])
+        text_height = max(0, text_box[3] - text_box[1])
+        anchor_x_px = (anchor[0] + offset_x) * width
+        anchor_y_px = (anchor[1] + offset_y) * height
+        draw_x = int(round(anchor_x_px - (text_width * 0.5) - text_box[0]))
+        draw_y = int(round(anchor_y_px - (text_height * 0.5) - text_box[1]))
+        draw.text((draw_x, draw_y), text, font=font, fill=(255, 255, 255, 255))
+
+    return np.asarray(text_canvas, dtype=np.uint8)
+
+
+def _render_text_overlay_frames(
+    image: torch.Tensor,
+    effect_params: dict,
+    fps: int,
+    duration: float,
+) -> torch.Tensor:
+    if not isinstance(effect_params.get("params"), dict):
+        raise ValueError("effect_params.params must be a dict")
+    params = effect_params["params"]
+
+    try:
+        fragment_shader_source = load_shader("text_overlay")
+    except FileNotFoundError as error:
+        raise ValueError("Shader not found for effect_name 'text_overlay'.") from error
+    try:
+        vertex_shader_source = load_vertex_shader("fullscreen_quad")
+    except FileNotFoundError as error:
+        raise ValueError("Vertex shader not found for 'fullscreen_quad'.") from error
+
+    import moderngl
+
+    source_frames, width, height, source_frame_count = _extract_input_image(image)
+    frame_count = round(duration * fps)
+
+    text_value = str(params.get("text", ""))
+    font_name = str(params.get("font", "")).strip()
+    if not font_name:
+        raise ValueError("text_overlay effect requires a font name")
+    font_size = int(np.clip(int(params.get("font_size", 48)), 8, 256))
+    anchor = _resolve_text_overlay_anchor(str(params.get("position", "bottom-center")))
+    offset_x = float(params.get("offset_x", 0.0))
+    offset_y = float(params.get("offset_y", 0.0))
+    animation = str(params.get("animation", "fade_in"))
+    animation_mode = _resolve_text_animation_mode(animation)
+    animation_duration = float(np.clip(float(params.get("animation_duration", 0.5)), 0.0, 5.0))
+
+    text_uniforms = {
+        "u_anchor_x": anchor[0],
+        "u_anchor_y": anchor[1],
+        "u_offset_x": offset_x,
+        "u_offset_y": offset_y,
+        "u_color_r": float(params.get("color_r", 1.0)),
+        "u_color_g": float(params.get("color_g", 1.0)),
+        "u_color_b": float(params.get("color_b", 1.0)),
+        "u_opacity": float(params.get("opacity", 1.0)),
+        "u_font_size": float(font_size),
+        "u_animation_mode": float(animation_mode),
+        "u_animation_duration": animation_duration,
+        "u_has_text_texture": 1.0,
+    }
+
+    font = _load_text_overlay_font(font_name, font_size)
+    text_texture_array = _render_text_overlay_texture_array(
+        width,
+        height,
+        text_value,
+        font,
+        anchor,
+        offset_x,
+        offset_y,
+    )
+
+    ctx = program = input_texture = text_texture = output_renderbuffer = fbo = vbo = vao = None
+    rendered_frames = []
+    active_source_frame_index = 0
+    active_visible_text = text_value
+    is_typewriter = animation_mode == _TEXT_ANIMATION_MODES["typewriter"]
+
+    try:
+        ctx = moderngl.create_standalone_context(backend="egl")
+        program = ctx.program(
+            vertex_shader=vertex_shader_source,
+            fragment_shader=fragment_shader_source,
+        )
+        input_texture = ctx.texture((width, height), 3, source_frames[0][::-1].tobytes())
+        text_texture = ctx.texture((width, height), 4, text_texture_array[::-1].tobytes())
+        output_renderbuffer = ctx.renderbuffer((width, height), components=3)
+        fbo = ctx.framebuffer(color_attachments=[output_renderbuffer])
+        vbo = ctx.buffer(_FULLSCREEN_QUAD_VERTICES.tobytes())
+        vao = ctx.simple_vertex_array(program, vbo, "in_pos")
+
+        input_texture.use(location=0)
+        text_texture.use(location=1)
+        try:
+            program["u_image"].value = 0
+        except KeyError:
+            pass
+        try:
+            program["u_text_texture"].value = 1
+        except KeyError:
+            pass
+        _set_program_uniform(program, "u_resolution", (width, height))
+
+        for frame_index in range(frame_count):
+            source_frame_index = frame_index % source_frame_count
+            if source_frame_index != active_source_frame_index:
+                input_texture.write(source_frames[source_frame_index][::-1].tobytes())
+                active_source_frame_index = source_frame_index
+
+            time_seconds = _resolve_frame_time_seconds(frame_index, fps)
+            if is_typewriter:
+                visible_text = _resolve_typewriter_visible_text(
+                    text_value,
+                    time_seconds,
+                    animation_duration,
+                )
+                if visible_text != active_visible_text:
+                    updated_texture_array = _render_text_overlay_texture_array(
+                        width,
+                        height,
+                        visible_text,
+                        font,
+                        anchor,
+                        offset_x,
+                        offset_y,
+                    )
+                    text_texture.write(updated_texture_array[::-1].tobytes())
+                    active_visible_text = visible_text
+
+            for uniform_name, uniform_value in text_uniforms.items():
+                _set_program_uniform(program, uniform_name, uniform_value)
+            for uniform_name, uniform_value in _resolve_timing_uniforms(frame_index, fps, duration).items():
+                _set_program_uniform(program, uniform_name, uniform_value)
+
+            fbo.use()
+            vao.render(moderngl.TRIANGLES)
+            frame_bytes = fbo.read(components=3)
+            frame_array = np.frombuffer(frame_bytes, dtype=np.uint8).reshape(height, width, 3)[::-1].copy()
+            frame_normalized = frame_array.astype(np.float32) / np.float32(255.0)
+            rendered_frames.append(torch.from_numpy(frame_normalized))
+
+        if rendered_frames:
+            return torch.stack(rendered_frames, dim=0)
+        return torch.empty((0, height, width, 3), dtype=torch.float32)
+    finally:
+        for resource in (vao, vbo, fbo, output_renderbuffer, text_texture, input_texture, program):
+            if resource is not None:
+                resource.release()
+        if ctx is not None:
+            ctx.release()
+
+
 def _render_frames(
     image: torch.Tensor,
     effect_params: dict,
@@ -197,6 +437,9 @@ def _render_frames(
 ) -> torch.Tensor:
     """Render all animation frames via OpenGL/GLSL and return a [N, H, W, 3] float32 tensor."""
     effect_name = _extract_effect_name(effect_params)
+    if effect_name == "text_overlay":
+        return _render_text_overlay_frames(image, effect_params, fps, duration)
+
     if not isinstance(effect_params.get("params"), dict):
         raise ValueError("effect_params.params must be a dict")
     try:
@@ -289,10 +532,8 @@ def _render_frames(
                     program["u_waveform"].value = waveform_samples
                 except KeyError:
                     pass
-            try:
-                program["u_time"].value = frame_index / fps
-            except KeyError:
-                pass
+            for uniform_name, uniform_value in _resolve_timing_uniforms(frame_index, fps, duration).items():
+                _set_program_uniform(program, uniform_name, uniform_value)
             fbo.use()
             vao.render(moderngl.TRIANGLES)
             frame_bytes = fbo.read(components=3)

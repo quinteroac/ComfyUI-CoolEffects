@@ -106,6 +106,19 @@ DEFAULT_PARAMS: dict[str, dict] = {
         "u_waveform_y": 0.8,
         "u_opacity": 0.85,
     },
+    "text_overlay": {
+        "u_color_r": 1.0,
+        "u_color_g": 1.0,
+        "u_color_b": 1.0,
+        "u_opacity": 1.0,
+        "u_anchor_x": 0.5,
+        "u_anchor_y": 0.12,
+        "u_offset_x": 0.0,
+        "u_offset_y": 0.0,
+        "u_font_size": 48.0,
+        "u_animation_mode": 1.0,
+        "u_animation_duration": 0.5,
+    },
 }
 
 

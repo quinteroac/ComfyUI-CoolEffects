@@ -45,6 +45,11 @@ const TEXT_OVERLAY_PARAM_SPECS = Object.freeze([
         uniform_name: "u_offset_y",
         default_value: 0.0,
     }),
+    Object.freeze({
+        widget_name: "animation_duration",
+        uniform_name: "u_animation_duration",
+        default_value: 0.5,
+    }),
 ]);
 
 const POSITION_ANCHORS = Object.freeze({
@@ -55,6 +60,14 @@ const POSITION_ANCHORS = Object.freeze({
     "bottom-left": Object.freeze([0.12, 0.12]),
     "bottom-center": Object.freeze([0.5, 0.12]),
     "bottom-right": Object.freeze([0.88, 0.12]),
+});
+
+const ANIMATION_MODES = Object.freeze({
+    none: 0,
+    fade_in: 1,
+    fade_in_out: 2,
+    slide_up: 3,
+    typewriter: 4,
 });
 
 function get_preview_controller(node) {
@@ -80,6 +93,20 @@ export function apply_text_overlay_position(node, position) {
     const [anchor_x, anchor_y] = map_position_to_anchor(position);
     preview_controller.set_uniform("u_anchor_x", anchor_x);
     preview_controller.set_uniform("u_anchor_y", anchor_y);
+    return true;
+}
+
+export function map_animation_to_mode(animation) {
+    const animation_key = typeof animation === "string" ? animation : "";
+    return ANIMATION_MODES[animation_key] ?? ANIMATION_MODES.fade_in;
+}
+
+export function apply_text_overlay_animation(node, animation) {
+    const preview_controller = get_preview_controller(node);
+    if (!preview_controller || typeof preview_controller.set_uniform !== "function") {
+        return false;
+    }
+    preview_controller.set_uniform("u_animation_mode", map_animation_to_mode(animation));
     return true;
 }
 
@@ -112,6 +139,13 @@ export async function mount_text_overlay_effect_widget_for_node({
 
     const position_value = get_node_widget_value(node, "position", "bottom-center");
     apply_text_overlay_position(node, position_value);
+    const animation_value = get_node_widget_value(node, "animation", "fade_in");
+    apply_text_overlay_animation(node, animation_value);
+    const preview_controller = get_preview_controller(node);
+    if (preview_controller && typeof preview_controller.set_uniform === "function") {
+        preview_controller.set_uniform("u_duration", 3.0);
+        preview_controller.set_uniform("u_has_text_texture", 0.0);
+    }
     return widget_state;
 }
 
@@ -172,6 +206,10 @@ export function register_comfy_extension(
                 const [widget_name, widget_value] = arguments;
                 if (widget_name === "position") {
                     apply_text_overlay_position(this, widget_value);
+                    return;
+                }
+                if (widget_name === "animation") {
+                    apply_text_overlay_animation(this, widget_value);
                     return;
                 }
 
