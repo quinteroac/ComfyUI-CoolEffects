@@ -39,3 +39,13 @@
 **Pitfalls Encountered:** None significant; the critical requirement was ensuring `dolly_out` defaults were added in both backend (`nodes/effect_params.py`) and frontend (`web/effect_node_widget.js`) to avoid preview/render mismatches.
 
 **Useful Context for Future Agents:** For paired inverse effects, preserve the same parameter schema and implement inversion inside GLSL math; this keeps node widgets and Video Generator integration simple because `CoolVideoGenerator` already resolves effect names dynamically via shared shader loading.
+
+## US-005 — Compatibilidad end-to-end con Video Generator
+
+**Summary:** Updated `CoolVideoGenerator` to expose all backend `effect_params_1`…`effect_params_8` optional inputs (not only `effect_params_1`), then added regression tests covering slot acceptance, Zoom+Dolly sequential execution, and `CoolVideoPlayer` compatibility of generated VIDEO payloads.
+
+**Key Decisions:** Declared all eight `effect_params_N` inputs directly in `INPUT_TYPES` to match the frontend dynamic slot behavior and ensure non-UI/runtime paths (workflow JSON/API execution) can validate and use any slot consistently.
+
+**Pitfalls Encountered:** Existing code already iterated `effect_params_1..effect_count` from `kwargs`, so the real gap was input declaration rather than render logic; focusing on INPUT_TYPES avoided unnecessary changes in the rendering pipeline.
+
+**Useful Context for Future Agents:** For `CoolVideoGenerator`, frontend dynamic slots in `web/video_generator.js` are not sufficient alone; backend `INPUT_TYPES` must declare every slot needed for type validation and reliable workflow loading/execution.

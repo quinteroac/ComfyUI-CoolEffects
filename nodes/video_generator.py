@@ -391,6 +391,10 @@ class CoolVideoGenerator:
 
     @classmethod
     def INPUT_TYPES(cls):
+        optional_effect_inputs = {
+            f"effect_params_{slot_index}": (EFFECT_PARAMS,)
+            for slot_index in range(1, 9)
+        }
         return {
             "required": {
                 "image": ("IMAGE",),
@@ -400,7 +404,7 @@ class CoolVideoGenerator:
             },
             "optional": {
                 "audio": ("AUDIO",),
-                "effect_params_1": (EFFECT_PARAMS,),
+                **optional_effect_inputs,
             },
         }
 
