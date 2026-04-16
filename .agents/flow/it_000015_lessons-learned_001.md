@@ -29,3 +29,13 @@
 **Pitfalls Encountered:** Python pytest is still unavailable in this environment (`python3 -m pytest` fails due missing module), so verification relied on existing JS test execution and Python bytecode compilation; boolean widget values in JS had to be validated through numeric coercion to avoid drift between UI control type and shader uniform type.
 
 **Useful Context for Future Agents:** For boolean-like shader toggles in this repo, use float uniforms and pass `1.0`/`0.0` from both node execute payload and widget updates, then branch in GLSL with `step()`/`mix()`; keep effect registration and defaults synchronized across `__init__.py`, `nodes/effect_params.py`, and `web/effect_node_widget.js` or generator/preview behavior diverges.
+
+## US-004 — Vignette Effect Node
+
+**Summary:** Added `CoolVignetteEffect` with `strength`, `radius`, and `softness` inputs; implemented `shaders/glsl/vignette.frag` using center-distance falloff with `smoothstep`; wired live preview support via `web/vignette_effect.js`; registered the node in package mappings; and added backend/frontend tests including generator pipeline coverage.
+
+**Key Decisions:** Reused the existing effect-node template (node + shared widget factory + shader-default sync) and introduced uniforms `u_strength`, `u_radius`, `u_softness` across backend and frontend defaults to keep generator and live preview behavior aligned; encoded vignette onset at `radius` with adjustable edge width (`soft_edge`) to preserve a clear artistic control mapping.
+
+**Pitfalls Encountered:** Running `compileall` generated `.pyc` churn in tracked and untracked `__pycache__` paths; cleaned all compiled artifacts to keep the working tree limited to intentional source/test changes.
+
+**Useful Context for Future Agents:** For any new effect, update all five surfaces together: `nodes/<effect>_effect.py`, `shaders/glsl/<effect>.frag`, defaults in `nodes/effect_params.py`, defaults in `web/effect_node_widget.js`, and `__init__.py` registration; adding a dedicated `web/<effect>_effect.js` wrapper keeps live-preview uniform tests straightforward and consistent with the current test style.

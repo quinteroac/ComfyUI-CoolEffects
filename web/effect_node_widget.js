@@ -110,6 +110,11 @@ const EFFECT_DEFAULT_UNIFORMS = Object.freeze({
         u_strength: 0.5,
         u_zoom: 1.0,
     }),
+    vignette: Object.freeze({
+        u_strength: 0.5,
+        u_radius: 0.75,
+        u_softness: 0.5,
+    }),
     pincushion: Object.freeze({
         u_strength: 0.5,
         u_zoom: 1.0,
