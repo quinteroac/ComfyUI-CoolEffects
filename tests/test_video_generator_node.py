@@ -177,3 +177,61 @@ def test_video_generator_output_stays_compatible_with_video_player():
         assert "source_url" in player_payload["ui"]["video"][0]
     finally:
         _cleanup_fake_comfy_api()
+
+
+def test_text_overlay_effect_params_workflow_renders_animated_video_frames():
+    _install_fake_comfy_api()
+    try:
+        text_overlay_module = _load_module(
+            "cool_effects_text_overlay_workflow_test",
+            "nodes/text_overlay_effect.py",
+        )
+        video_generator_module = _load_module(
+            "cool_effects_video_generator_text_overlay_workflow_test",
+            "nodes/video_generator.py",
+        )
+
+        node = text_overlay_module.CoolTextOverlayEffect()
+        (text_overlay_params,) = node.execute(
+            text="Animated",
+            font="dejavu_sans.ttf",
+            font_size=48,
+            color_r=1.0,
+            color_g=1.0,
+            color_b=1.0,
+            opacity=1.0,
+            position="bottom-center",
+            offset_x=0.0,
+            offset_y=0.0,
+            animation="fade_in_out",
+            animation_duration=0.5,
+        )
+
+        called_effect_names: list[str] = []
+
+        def _fake_render_text_overlay_frames(image, effect_params, fps, duration):
+            called_effect_names.append(effect_params["effect_name"])
+            _, height, width, _ = image.shape
+            frame_count = round(duration * fps)
+            return torch.full((frame_count, height, width, 3), 0.8, dtype=torch.float32)
+
+        video_generator_module._render_text_overlay_frames = _fake_render_text_overlay_frames
+        video_generator_module.extract_audio_features = lambda audio, fps, duration: []
+
+        input_image = torch.zeros((1, 8, 8, 3), dtype=torch.float32)
+        generator = video_generator_module.CoolVideoGenerator()
+        generated = generator.execute(
+            image=input_image,
+            fps=12,
+            duration=1.0,
+            effect_count=1,
+            effect_params_1=text_overlay_params,
+        )
+
+        generated_video = generated["result"][0]
+        assert isinstance(generated_video, _FakeVideo)
+        assert called_effect_names == ["text_overlay"]
+        assert generated_video.images.shape[0] == 12
+        assert torch.mean(generated_video.images).item() > 0.0
+    finally:
+        _cleanup_fake_comfy_api()

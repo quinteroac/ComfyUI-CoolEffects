@@ -125,6 +125,67 @@ def test_execute_outputs_position_and_offsets():
     assert effect_params["params"]["animation_duration"] == 1.2
 
 
+def test_effect_output_contract_uses_effect_params_type():
+    module = _load_module(
+        "cool_effects_text_overlay_effect_output_contract_test",
+        REPO_ROOT / "nodes" / "text_overlay_effect.py",
+    )
+
+    assert module.CoolTextOverlayEffect.RETURN_TYPES == ("EFFECT_PARAMS",)
+    assert module.CoolTextOverlayEffect.RETURN_NAMES == ("EFFECT_PARAMS",)
+
+
+def test_execute_builds_text_overlay_effect_params_with_all_configured_values():
+    module = _load_module(
+        "cool_effects_text_overlay_effect_build_params_test",
+        REPO_ROOT / "nodes" / "text_overlay_effect.py",
+    )
+
+    node = module.CoolTextOverlayEffect()
+    (effect_params,) = node.execute(
+        text="story-title",
+        font="dejavu_sans.ttf",
+        font_size=64,
+        color_r=0.7,
+        color_g=0.4,
+        color_b=0.1,
+        opacity=0.85,
+        position="bottom-right",
+        offset_x=-0.2,
+        offset_y=0.3,
+        animation="slide_up",
+        animation_duration=2.4,
+    )
+
+    assert effect_params == {
+        "effect_name": "text_overlay",
+        "params": {
+            "text": "story-title",
+            "font": "dejavu_sans.ttf",
+            "font_size": 64,
+            "color_r": 0.7,
+            "color_g": 0.4,
+            "color_b": 0.1,
+            "opacity": 0.85,
+            "position": "bottom-right",
+            "offset_x": -0.2,
+            "offset_y": 0.3,
+            "animation": "slide_up",
+            "animation_duration": 2.4,
+        },
+    }
+
+
+def test_text_overlay_node_is_registered_in_package_mappings():
+    module = _load_module(
+        "cool_effects_package_text_overlay_registration_test",
+        REPO_ROOT / "__init__.py",
+    )
+
+    assert module.NODE_CLASS_MAPPINGS["CoolTextOverlayEffect"] is module.CoolTextOverlayEffect
+    assert module.NODE_DISPLAY_NAME_MAPPINGS["CoolTextOverlayEffect"] == "Cool Text Overlay Effect"
+
+
 def test_font_combo_uses_alphabetical_ttf_scan_order(tmp_path: Path):
     module_path = _create_temp_text_overlay_node(
         tmp_path,

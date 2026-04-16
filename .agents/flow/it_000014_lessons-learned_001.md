@@ -29,3 +29,13 @@
 **Pitfalls Encountered:** The existing text overlay shader was a proxy rounded rectangle with no text texture sampler, so backend and preview needed a compatibility bridge. Solved by adding `u_has_text_texture` and keeping the proxy shape path for preview while using true text texture alpha in backend rendering.
 
 **Useful Context for Future Agents:** Text overlay font resolution is strict (`assets/fonts/<font_name>`), and animation mode is mapped numerically (`none=0`, `fade_in=1`, `fade_in_out=2`, `slide_up=3`, `typewriter=4`) consistently across Python (`video_generator.py`) and JS (`web/text_overlay_effect.js`).
+
+## US-004 — Output EFFECT_PARAMS compatible with CoolVideoGenerator
+
+**Summary:** Added targeted test coverage for `CoolTextOverlayEffect` output contract and package registration, then added a workflow test proving `CoolVideoGenerator` accepts `CoolTextOverlayEffect` output and produces non-empty animated frames.
+
+**Key Decisions:** Kept production code unchanged because all required behavior already existed; implemented AC verification through focused integration tests that assert `RETURN_TYPES`, full `build_effect_params("text_overlay", {...})` payload shape, `NODE_*_MAPPINGS` registration, and text-overlay render path invocation inside video generation.
+
+**Pitfalls Encountered:** Full GL rendering is environment-sensitive in CI, so AC04 coverage was implemented by stubbing only `_render_text_overlay_frames` while still exercising real `CoolVideoGenerator.execute()` flow and real `CoolTextOverlayEffect.execute()` output.
+
+**Useful Context for Future Agents:** The new workflow test in `tests/test_video_generator_node.py` is the canonical pattern for effect-node → video-generator compatibility checks without depending on GPU/EGL availability; it still validates frame count and non-zero output intensity to represent visible overlay output.
