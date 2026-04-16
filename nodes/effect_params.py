@@ -72,6 +72,10 @@ DEFAULT_PARAMS: dict[str, dict] = {
         "u_tint_temperature": 0.0,
         "u_condensation_rate": 0.0,
     },
+    "fisheye": {
+        "u_strength": 0.5,
+        "u_zoom": 1.0,
+    },
     "pan_left": {
         "u_speed": 0.1,
         "u_origin_x": 0.0,

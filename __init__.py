@@ -100,6 +100,12 @@ _frosted_glass_effect_module = _load_module_from_path(
 )
 CoolFrostedGlassEffect = _frosted_glass_effect_module.CoolFrostedGlassEffect
 
+_fisheye_effect_module = _load_module_from_path(
+    "cool_effects_fisheye_effect_runtime",
+    PACKAGE_ROOT / "nodes" / "fisheye_effect.py",
+)
+CoolFisheyeEffect = _fisheye_effect_module.CoolFisheyeEffect
+
 _waveform_effect_module = _load_module_from_path(
     "cool_effects_waveform_effect_runtime",
     PACKAGE_ROOT / "nodes" / "waveform_effect.py",
@@ -175,6 +181,7 @@ NODE_CLASS_MAPPINGS = {
     "CoolFreqWarpEffect": CoolFreqWarpEffect,
     "CoolWaterDropsEffect": CoolWaterDropsEffect,
     "CoolFrostedGlassEffect": CoolFrostedGlassEffect,
+    "CoolFisheyeEffect": CoolFisheyeEffect,
     "CoolWaveformEffect": CoolWaveformEffect,
     "CoolTextOverlayEffect": CoolTextOverlayEffect,
     "CoolPanLeftEffect": CoolPanLeftEffect,
@@ -198,6 +205,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CoolFreqWarpEffect": "Cool Freq Warp Effect",
     "CoolWaterDropsEffect": "Cool Water Drops Effect",
     "CoolFrostedGlassEffect": "Cool Frosted Glass Effect",
+    "CoolFisheyeEffect": "Cool Fisheye Effect",
     "CoolWaveformEffect": "Cool Waveform Effect",
     "CoolTextOverlayEffect": "Cool Text Overlay Effect",
     "CoolPanLeftEffect": "Cool Pan Left Effect",

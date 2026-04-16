@@ -106,6 +106,10 @@ const EFFECT_DEFAULT_UNIFORMS = Object.freeze({
         u_tint_temperature: 0.0,
         u_condensation_rate: 0.0,
     }),
+    fisheye: Object.freeze({
+        u_strength: 0.5,
+        u_zoom: 1.0,
+    }),
     waveform: Object.freeze({
         u_line_thickness: 0.005,
         u_waveform_height: 0.2,
