@@ -64,6 +64,12 @@ _dolly_in_effect_module = _load_module_from_path(
 )
 CoolDollyInEffect = _dolly_in_effect_module.CoolDollyInEffect
 
+_dolly_out_effect_module = _load_module_from_path(
+    "cool_effects_dolly_out_effect_runtime",
+    PACKAGE_ROOT / "nodes" / "dolly_out_effect.py",
+)
+CoolDollyOutEffect = _dolly_out_effect_module.CoolDollyOutEffect
+
 _bass_zoom_effect_module = _load_module_from_path(
     "cool_effects_bass_zoom_effect_runtime",
     PACKAGE_ROOT / "nodes" / "bass_zoom_effect.py",
@@ -157,6 +163,7 @@ NODE_CLASS_MAPPINGS = {
     "CoolZoomInEffect": CoolZoomInEffect,
     "CoolZoomOutEffect": CoolZoomOutEffect,
     "CoolDollyInEffect": CoolDollyInEffect,
+    "CoolDollyOutEffect": CoolDollyOutEffect,
     "CoolBassZoomEffect": CoolBassZoomEffect,
     "CoolBeatPulseEffect": CoolBeatPulseEffect,
     "CoolFreqWarpEffect": CoolFreqWarpEffect,
@@ -178,6 +185,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CoolZoomInEffect": "Cool Zoom In Effect",
     "CoolZoomOutEffect": "Cool Zoom Out Effect",
     "CoolDollyInEffect": "Cool Dolly In Effect",
+    "CoolDollyOutEffect": "Cool Dolly Out Effect",
     "CoolBassZoomEffect": "Cool Bass Zoom Effect",
     "CoolBeatPulseEffect": "Cool Beat Pulse Effect",
     "CoolFreqWarpEffect": "Cool Freq Warp Effect",

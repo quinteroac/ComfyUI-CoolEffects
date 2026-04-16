@@ -29,3 +29,13 @@
 **Pitfalls Encountered:** Python smoke checks can create noisy tracked/untracked `__pycache__` artifacts in this repo; they need cleanup before handing off changes.
 
 **Useful Context for Future Agents:** `CoolVideoGenerator` required no code changes for new effects—once `effect_name` is `"dolly_in"` and the shader/defaults are present, it renders automatically via dynamic shader loading and merged uniform params.
+
+## US-004 — Nodo Dolly Out
+
+**Summary:** Implemented `CoolDollyOutEffect` end-to-end with editable `dolly_strength`, `dolly_speed`, `focus_x`, and `focus_y`, plus dedicated shader/frontend preview wiring and node registration updates.
+
+**Key Decisions:** Kept Dolly Out uniform names aligned with Dolly In (`u_dolly_strength`, `u_dolly_speed`, `u_focus_x`, `u_focus_y`) and only inverted shader scale progression so both effects share a consistent parameter UX while producing opposite camera movement.
+
+**Pitfalls Encountered:** None significant; the critical requirement was ensuring `dolly_out` defaults were added in both backend (`nodes/effect_params.py`) and frontend (`web/effect_node_widget.js`) to avoid preview/render mismatches.
+
+**Useful Context for Future Agents:** For paired inverse effects, preserve the same parameter schema and implement inversion inside GLSL math; this keeps node widgets and Video Generator integration simple because `CoolVideoGenerator` already resolves effect names dynamically via shared shader loading.

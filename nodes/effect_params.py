@@ -31,6 +31,12 @@ DEFAULT_PARAMS: dict[str, dict] = {
         "u_focus_x": 0.5,
         "u_focus_y": 0.5,
     },
+    "dolly_out": {
+        "u_dolly_strength": 0.35,
+        "u_dolly_speed": 0.7,
+        "u_focus_x": 0.5,
+        "u_focus_y": 0.5,
+    },
     "bass_zoom": {
         "u_zoom_strength": 0.3,
         "u_smoothing": 0.5,
