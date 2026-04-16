@@ -52,6 +52,12 @@ _zoom_in_effect_module = _load_module_from_path(
 )
 CoolZoomInEffect = _zoom_in_effect_module.CoolZoomInEffect
 
+_zoom_out_effect_module = _load_module_from_path(
+    "cool_effects_zoom_out_effect_runtime",
+    PACKAGE_ROOT / "nodes" / "zoom_out_effect.py",
+)
+CoolZoomOutEffect = _zoom_out_effect_module.CoolZoomOutEffect
+
 _bass_zoom_effect_module = _load_module_from_path(
     "cool_effects_bass_zoom_effect_runtime",
     PACKAGE_ROOT / "nodes" / "bass_zoom_effect.py",
@@ -143,6 +149,7 @@ NODE_CLASS_MAPPINGS = {
     "CoolVHSEffect": CoolVHSEffect,
     "CoolZoomPulseEffect": CoolZoomPulseEffect,
     "CoolZoomInEffect": CoolZoomInEffect,
+    "CoolZoomOutEffect": CoolZoomOutEffect,
     "CoolBassZoomEffect": CoolBassZoomEffect,
     "CoolBeatPulseEffect": CoolBeatPulseEffect,
     "CoolFreqWarpEffect": CoolFreqWarpEffect,
@@ -162,6 +169,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CoolVHSEffect": "Cool VHS Effect",
     "CoolZoomPulseEffect": "Cool Zoom Pulse Effect",
     "CoolZoomInEffect": "Cool Zoom In Effect",
+    "CoolZoomOutEffect": "Cool Zoom Out Effect",
     "CoolBassZoomEffect": "Cool Bass Zoom Effect",
     "CoolBeatPulseEffect": "Cool Beat Pulse Effect",
     "CoolFreqWarpEffect": "Cool Freq Warp Effect",

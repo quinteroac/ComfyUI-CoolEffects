@@ -21,6 +21,10 @@ DEFAULT_PARAMS: dict[str, dict] = {
         "u_zoom_strength": 0.25,
         "u_zoom_speed": 0.6,
     },
+    "zoom_out": {
+        "u_zoom_strength": 0.2,
+        "u_zoom_speed": 0.6,
+    },
     "bass_zoom": {
         "u_zoom_strength": 0.3,
         "u_smoothing": 0.5,

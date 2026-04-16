@@ -9,6 +9,7 @@ ComfyUI-CoolEffects is a custom node package for applying GLSL-driven effects to
 - `CoolVHSEffect`: outputs VHS `EFFECT_PARAMS` from scanline/chroma controls and includes a live preview widget.
 - `CoolZoomPulseEffect`: outputs zoom pulse `EFFECT_PARAMS` from pulse controls and includes a live preview widget.
 - `CoolZoomInEffect`: outputs zoom-in `EFFECT_PARAMS` from zoom strength/speed controls and includes a live preview widget.
+- `CoolZoomOutEffect`: outputs zoom-out `EFFECT_PARAMS` from zoom strength/speed controls and includes a live preview widget.
 - `CoolBassZoomEffect`: outputs bass zoom `EFFECT_PARAMS` from zoom/smoothing controls and includes a synthetic-60-BPM live preview pulse.
 - `CoolBeatPulseEffect`: outputs beat pulse `EFFECT_PARAMS` from pulse intensity/zoom/decay controls and includes a synthetic-120-BPM live preview signal.
 - `CoolFreqWarpEffect`: outputs frequency-warp `EFFECT_PARAMS` from warp and band-weight controls and includes a synthetic mid/treble live preview signal.
