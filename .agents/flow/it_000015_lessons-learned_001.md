@@ -19,3 +19,13 @@
 **Pitfalls Encountered:** This environment has no `python` alias, no `pip` for `python3`, and no installed `torch`, so Python runtime tests could not be executed here; only JS test execution and Python bytecode compilation were available.
 
 **Useful Context for Future Agents:** For any new shader effect, keep backend `DEFAULT_PARAMS` (`nodes/effect_params.py`) and frontend `EFFECT_DEFAULT_UNIFORMS` (`web/effect_node_widget.js`) in sync, otherwise preview defaults and generator defaults drift; the quickest reliable template for new strength/zoom distortions is `fisheye_effect.py/js` + matching test files with only effect key/name differences.
+
+## US-003 — Chromatic Aberration Effect Node
+
+**Summary:** Added `CoolChromaticAberrationEffect` with `strength` and `radial` inputs, implemented `shaders/glsl/chromatic_aberration.frag` with per-channel UV offsets, wired frontend live preview integration in `web/chromatic_aberration_effect.js`, registered the node in package mappings, and added backend/frontend tests plus generator pipeline coverage.
+
+**Key Decisions:** Kept `radial` transport numeric (`u_radial` as `1.0`/`0.0`) so backend generator uniforms and frontend widget updates both use the existing numeric uniform path; implemented mode switching in shader via `mix(lateral_offset, radial_offset, radial_mode)` where radial mode scales by distance-to-center while lateral mode stays constant in X.
+
+**Pitfalls Encountered:** Python pytest is still unavailable in this environment (`python3 -m pytest` fails due missing module), so verification relied on existing JS test execution and Python bytecode compilation; boolean widget values in JS had to be validated through numeric coercion to avoid drift between UI control type and shader uniform type.
+
+**Useful Context for Future Agents:** For boolean-like shader toggles in this repo, use float uniforms and pass `1.0`/`0.0` from both node execute payload and widget updates, then branch in GLSL with `step()`/`mix()`; keep effect registration and defaults synchronized across `__init__.py`, `nodes/effect_params.py`, and `web/effect_node_widget.js` or generator/preview behavior diverges.
