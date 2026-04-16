@@ -1,0 +1,198 @@
+{
+  "goals": [
+    "Expand the effect library with 5 lens-based GLSL distortion nodes",
+    "Each node plugs into the existing `CoolVideoGenerator` multi-effect chain without any changes to downstream nodes",
+    "Artists can preview distortion in real time inside the node widget before rendering"
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Fisheye Effect Node",
+      "description": "As a ComfyUI artist, I want a Fisheye node that applies barrel distortion to an image so that I can simulate an ultra-wide / fisheye lens look. Inputs: - `strength` (FLOAT, default 0.5, min 0.0, max 1.0, step 0.01) — distortion intensity - `zoom` (FLOAT, default 1.0, min 0.5, max 2.0, step 0.01) — compensating zoom to avoid black borders",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "Node `CoolFisheyeEffect` appears in ComfyUI under the correct category"
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "Node outputs `EFFECT_PARAMS` with `effect_name = \"fisheye\"`"
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "GLSL fragment shader `shaders/glsl/fisheye.frag` implements barrel distortion via polar-coordinate UV remapping"
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "Live WebGL2 preview inside the node widget updates when `strength` or `zoom` sliders change"
+        },
+        {
+          "id": "US-001-AC05",
+          "text": "Effect is visually verified through `CoolVideoGenerator` — rendered video frames show barrel distortion"
+        },
+        {
+          "id": "US-001-AC06",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Pincushion Effect Node",
+      "description": "As a ComfyUI artist, I want a Pincushion node that applies pincushion (inverse barrel) distortion so that I can simulate the compression warp of a telephoto lens. Inputs: - `strength` (FLOAT, default 0.5, min 0.0, max 1.0, step 0.01) — distortion intensity - `zoom` (FLOAT, default 1.0, min 0.5, max 2.0, step 0.01) — compensating zoom",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "Node `CoolPincushionEffect` appears in ComfyUI"
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "Node outputs `EFFECT_PARAMS` with `effect_name = \"pincushion\"`"
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "GLSL fragment shader `shaders/glsl/pincushion.frag` implements inverse-barrel distortion (edges pulled inward)"
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "Live WebGL2 preview updates in real time"
+        },
+        {
+          "id": "US-002-AC05",
+          "text": "Effect is visually verified through `CoolVideoGenerator`"
+        },
+        {
+          "id": "US-002-AC06",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "Chromatic Aberration Effect Node",
+      "description": "As a ComfyUI artist, I want a Chromatic Aberration node that separates the RGB channels radially so that I can simulate lens colour dispersion (fringing at edges). Inputs: - `strength` (FLOAT, default 0.01, min 0.0, max 0.1, step 0.001) — magnitude of channel separation - `radial` (BOOLEAN, default True) — when True, separation grows toward edges (radial); when False, uniform lateral shift",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "Node `CoolChromaticAberrationEffect` appears in ComfyUI"
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "Node outputs `EFFECT_PARAMS` with `effect_name = \"chromatic_aberration\"`"
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "GLSL fragment shader `shaders/glsl/chromatic_aberration.frag` samples R, G, B channels at slightly offset UVs"
+        },
+        {
+          "id": "US-003-AC04",
+          "text": "Radial mode increases separation toward image corners; lateral mode applies uniform constant offset"
+        },
+        {
+          "id": "US-003-AC05",
+          "text": "Live WebGL2 preview updates in real time"
+        },
+        {
+          "id": "US-003-AC06",
+          "text": "Effect is visually verified through `CoolVideoGenerator`"
+        },
+        {
+          "id": "US-003-AC07",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Vignette Effect Node",
+      "description": "As a ComfyUI artist, I want a Vignette node that darkens image edges so that I can add cinematic depth or draw attention to the centre. Inputs: - `strength` (FLOAT, default 0.5, min 0.0, max 1.0, step 0.01) — darkness at edges - `radius` (FLOAT, default 0.75, min 0.1, max 1.5, step 0.01) — how far from centre the vignette begins - `softness` (FLOAT, default 0.5, min 0.0, max 1.0, step 0.01) — falloff smoothness",
+      "acceptanceCriteria": [
+        {
+          "id": "US-004-AC01",
+          "text": "Node `CoolVignetteEffect` appears in ComfyUI"
+        },
+        {
+          "id": "US-004-AC02",
+          "text": "Node outputs `EFFECT_PARAMS` with `effect_name = \"vignette\"`"
+        },
+        {
+          "id": "US-004-AC03",
+          "text": "GLSL fragment shader `shaders/glsl/vignette.frag` computes radial distance from centre and applies smooth darkening"
+        },
+        {
+          "id": "US-004-AC04",
+          "text": "Live WebGL2 preview updates in real time"
+        },
+        {
+          "id": "US-004-AC05",
+          "text": "Effect is visually verified through `CoolVideoGenerator`"
+        },
+        {
+          "id": "US-004-AC06",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    },
+    {
+      "id": "US-005",
+      "title": "Tilt-Shift Effect Node",
+      "description": "As a ComfyUI artist, I want a Tilt-Shift node that blurs the top and bottom bands of the image while keeping the centre sharp so that I can create a miniature/model-world illusion. Inputs: - `focus_center` (FLOAT, default 0.5, min 0.0, max 1.0, step 0.01) — vertical position of the sharp band (0 = top, 1 = bottom) - `focus_width` (FLOAT, default 0.2, min 0.0, max 1.0, step 0.01) — fraction of image height kept in focus - `blur_strength` (FLOAT, default 0.5, min 0.0, max 1.0, step 0.01) — intensity of blur in out-of-focus bands - `angle` (FLOAT, optional, default 0.0, min 0.0, max 360.0, step 1.0) — rotation of the focus band in degrees; reserved for future use, defaults to horizontal band (0°)",
+      "acceptanceCriteria": [
+        {
+          "id": "US-005-AC01",
+          "text": "Node `CoolTiltShiftEffect` appears in ComfyUI"
+        },
+        {
+          "id": "US-005-AC02",
+          "text": "Node outputs `EFFECT_PARAMS` with `effect_name = \"tilt_shift\"`"
+        },
+        {
+          "id": "US-005-AC03",
+          "text": "GLSL fragment shader `shaders/glsl/tilt_shift.frag` applies a blur kernel (Gaussian approximation) that scales with distance from the focus band"
+        },
+        {
+          "id": "US-005-AC04",
+          "text": "Live WebGL2 preview updates in real time when any slider changes"
+        },
+        {
+          "id": "US-005-AC05",
+          "text": "Effect is visually verified through `CoolVideoGenerator` — rendered video shows sharp centre band with blurred top/bottom"
+        },
+        {
+          "id": "US-005-AC06",
+          "text": "Typecheck / lint passes"
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "Each new node must follow the file layout convention: `nodes/<effect>_effect.py` (Python) + `shaders/glsl/<effect>.frag` (GLSL) + `web/<effect>_effect.js` (JS frontend)"
+    },
+    {
+      "id": "FR-2",
+      "description": "Each GLSL shader must accept the standard uniform contract: `uniform sampler2D u_image`, `uniform float u_time`, `uniform vec2 u_resolution`, plus effect-specific uniforms"
+    },
+    {
+      "id": "FR-3",
+      "description": "Each Python node must call `build_effect_params()` from `nodes/effect_params.py` to construct its output"
+    },
+    {
+      "id": "FR-4",
+      "description": "Each JS frontend extension must use `mount_effect_node_widget` from `web/effect_node_widget.js` to attach the WebGL2 preview canvas"
+    },
+    {
+      "id": "FR-5",
+      "description": "All five nodes must be registered in `NODE_CLASS_MAPPINGS` and `NODE_DISPLAY_NAME_MAPPINGS` in `__init__.py`"
+    },
+    {
+      "id": "FR-6",
+      "description": "GL resource cleanup in the Python backend must follow the established `try/finally` teardown order (vao → vbo → fbo → renderbuffer → texture → program → ctx)"
+    },
+    {
+      "id": "FR-7",
+      "description": "No new Python package dependencies may be introduced"
+    }
+  ]
+}

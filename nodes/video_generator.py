@@ -640,7 +640,7 @@ class CoolVideoGenerator:
             "required": {
                 "image": ("IMAGE",),
                 "fps": ("INT", {"default": 30, "min": 1, "max": 60}),
-                "duration": ("FLOAT", {"default": 3.0, "min": 0.5, "max": 60.0, "step": 0.5}),
+                "duration": ("FLOAT", {"default": 3.0, "min": 0.5, "max": 300.0, "step": 0.5}),
                 "effect_count": ("INT", {"default": 1, "min": 1, "max": 8}),
             },
             "optional": {
