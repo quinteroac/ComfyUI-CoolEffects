@@ -39,3 +39,13 @@
 **Pitfalls Encountered:** Full GL rendering is environment-sensitive in CI, so AC04 coverage was implemented by stubbing only `_render_text_overlay_frames` while still exercising real `CoolVideoGenerator.execute()` flow and real `CoolTextOverlayEffect.execute()` output.
 
 **Useful Context for Future Agents:** The new workflow test in `tests/test_video_generator_node.py` is the canonical pattern for effect-node → video-generator compatibility checks without depending on GPU/EGL availability; it still validates frame count and non-zero output intensity to represent visible overlay output.
+
+## US-005 — Live WebGL2 preview in the node widget
+
+**Summary:** Upgraded `web/text_overlay_effect.js` so the live preview now renders real text into a canvas texture and feeds it into the shader (`u_text_texture`) while preserving animation uniforms. Also extended the shared WebGL2 preview controller to support extra sampler uniforms beyond `u_image`.
+
+**Key Decisions:** Implemented preview-texture regeneration as a dedicated helper (`sync_text_overlay_preview_content`) triggered on text/font/size/position/offset changes, while keeping color/opacity/animation updates on existing uniform paths. Added `set_texture()` to the live preview controller and `set_sampler_texture()` to the renderer to keep this reusable for future effects needing multiple textures.
+
+**Pitfalls Encountered:** The previous preview shader path only used a proxy rounded rectangle and the shared renderer only bound `u_image`, so text content could not update visually even when uniforms changed. This required coordinated updates in both `effect_selector.js` and `text_overlay_effect.js`.
+
+**Useful Context for Future Agents:** For effects that need additional textures, use `preview_controller.set_texture(uniform_name, texture_source)`; textures are rebound automatically after shader reload. `tests/test_text_overlay_effect_web.mjs` now covers the texture build path and preview sync behavior for text-overlay realtime updates.

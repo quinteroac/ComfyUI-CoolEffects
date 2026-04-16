@@ -8,6 +8,16 @@ import { loadShader } from "./shaders/loader.js";
 export const EXTENSION_NAME = "Comfy.CoolEffects.TextOverlayEffect";
 const EFFECT_NAME = "text_overlay";
 const TEXT_OVERLAY_STATE_KEY = "__cool_text_overlay_widget_state";
+const PREVIEW_TEXTURE_SIZE = 512;
+const PREVIEW_TEXT_MAX_CHARS = 160;
+const TEXT_WIDGETS_THAT_REQUIRE_TEXTURE_REFRESH = new Set([
+    "text",
+    "font",
+    "font_size",
+    "position",
+    "offset_x",
+    "offset_y",
+]);
 
 const TEXT_OVERLAY_PARAM_SPECS = Object.freeze([
     Object.freeze({
@@ -80,6 +90,115 @@ function get_node_widget_value(node, widget_name, fallback_value = null) {
     return widget?.value ?? fallback_value;
 }
 
+function clamp(value, min_value, max_value) {
+    return Math.min(Math.max(value, min_value), max_value);
+}
+
+function resolve_font_family(font_name) {
+    if (typeof font_name !== "string" || font_name.length === 0) {
+        return "sans-serif";
+    }
+    const sanitized_font_name = font_name
+        .replace(/\.[^.]+$/, "")
+        .replace(/['"]/g, "")
+        .trim();
+    if (sanitized_font_name.length === 0) {
+        return "sans-serif";
+    }
+    return `"${sanitized_font_name}", sans-serif`;
+}
+
+function to_preview_text(raw_text) {
+    const text_value = typeof raw_text === "string" ? raw_text.trim() : "";
+    if (text_value.length === 0) {
+        return "";
+    }
+    if (text_value.length <= PREVIEW_TEXT_MAX_CHARS) {
+        return text_value;
+    }
+    return `${text_value.slice(0, PREVIEW_TEXT_MAX_CHARS - 1)}…`;
+}
+
+function resolve_text_alignment(position) {
+    const position_key = typeof position === "string" ? position : "";
+    const horizontal = position_key.includes("left")
+        ? "left"
+        : position_key.includes("right")
+          ? "right"
+          : "center";
+    const vertical = position_key.includes("top")
+        ? "top"
+        : position_key.includes("bottom")
+          ? "bottom"
+          : "center";
+    return { horizontal, vertical };
+}
+
+export function build_text_overlay_preview_texture(
+    document_ref,
+    {
+        text = "",
+        font = "",
+        font_size = 48,
+        position = "bottom-center",
+        offset_x = 0,
+        offset_y = 0,
+    } = {},
+) {
+    if (!document_ref || typeof document_ref.createElement !== "function") {
+        return null;
+    }
+    const texture_canvas = document_ref.createElement("canvas");
+    if (!texture_canvas || typeof texture_canvas.getContext !== "function") {
+        return null;
+    }
+    texture_canvas.width = PREVIEW_TEXTURE_SIZE;
+    texture_canvas.height = PREVIEW_TEXTURE_SIZE;
+    const context_2d = texture_canvas.getContext("2d");
+    if (!context_2d) {
+        return null;
+    }
+
+    const preview_text = to_preview_text(text);
+    if (preview_text.length === 0) {
+        return texture_canvas;
+    }
+
+    const resolved_font_size = clamp(Number(font_size) || 48, 8, 256);
+    const font_family = resolve_font_family(font);
+    context_2d.clearRect(0, 0, PREVIEW_TEXTURE_SIZE, PREVIEW_TEXTURE_SIZE);
+    context_2d.fillStyle = "rgba(255, 255, 255, 1)";
+    context_2d.font = `${resolved_font_size}px ${font_family}`;
+
+    const { horizontal, vertical } = resolve_text_alignment(position);
+    context_2d.textAlign = horizontal;
+    context_2d.textBaseline =
+        vertical === "top" ? "top" : vertical === "bottom" ? "bottom" : "middle";
+
+    const [anchor_x, anchor_y] = map_position_to_anchor(position);
+    const resolved_x = clamp(
+        (anchor_x + Number(offset_x || 0)) * PREVIEW_TEXTURE_SIZE,
+        PREVIEW_TEXTURE_SIZE * 0.04,
+        PREVIEW_TEXTURE_SIZE * 0.96,
+    );
+    const resolved_y = clamp(
+        (1 - (anchor_y + Number(offset_y || 0))) * PREVIEW_TEXTURE_SIZE,
+        PREVIEW_TEXTURE_SIZE * 0.08,
+        PREVIEW_TEXTURE_SIZE * 0.92,
+    );
+
+    const max_text_width = PREVIEW_TEXTURE_SIZE * 0.9;
+    let draw_text = preview_text;
+    while (
+        draw_text.length > 1 &&
+        context_2d.measureText(draw_text).width > max_text_width
+    ) {
+        draw_text = `${draw_text.slice(0, -2)}…`;
+    }
+    context_2d.fillText(draw_text, resolved_x, resolved_y, max_text_width);
+    return texture_canvas;
+}
+
 export function map_position_to_anchor(position) {
     const position_key = typeof position === "string" ? position : "";
     return POSITION_ANCHORS[position_key] ?? POSITION_ANCHORS["bottom-center"];
@@ -108,6 +227,38 @@ export function apply_text_overlay_animation(node, animation) {
     }
     preview_controller.set_uniform("u_animation_mode", map_animation_to_mode(animation));
     return true;
+}
+
+export function sync_text_overlay_preview_content(
+    node,
+    document_ref = globalThis.document,
+) {
+    const preview_controller = get_preview_controller(node);
+    if (!preview_controller || typeof preview_controller.set_uniform !== "function") {
+        return false;
+    }
+    if (typeof preview_controller.set_texture !== "function") {
+        preview_controller.set_uniform("u_has_text_texture", 0.0);
+        return false;
+    }
+
+    const text_value = get_node_widget_value(node, "text", "");
+    const preview_texture = build_text_overlay_preview_texture(document_ref, {
+        text: text_value,
+        font: get_node_widget_value(node, "font", ""),
+        font_size: get_node_widget_value(node, "font_size", 48),
+        position: get_node_widget_value(node, "position", "bottom-center"),
+        offset_x: get_node_widget_value(node, "offset_x", 0.0),
+        offset_y: get_node_widget_value(node, "offset_y", 0.0),
+    });
+    const has_text_texture =
+        Boolean(preview_texture) &&
+        typeof text_value === "string" &&
+        text_value.trim().length > 0;
+
+    preview_controller.set_texture("u_text_texture", has_text_texture ? preview_texture : null);
+    preview_controller.set_uniform("u_has_text_texture", has_text_texture ? 1.0 : 0.0);
+    return has_text_texture;
 }
 
 export async function mount_text_overlay_effect_widget_for_node({
@@ -144,8 +295,8 @@ export async function mount_text_overlay_effect_widget_for_node({
     const preview_controller = get_preview_controller(node);
     if (preview_controller && typeof preview_controller.set_uniform === "function") {
         preview_controller.set_uniform("u_duration", 3.0);
-        preview_controller.set_uniform("u_has_text_texture", 0.0);
     }
+    sync_text_overlay_preview_content(node, document_ref);
     return widget_state;
 }
 
@@ -206,20 +357,21 @@ export function register_comfy_extension(
                 const [widget_name, widget_value] = arguments;
                 if (widget_name === "position") {
                     apply_text_overlay_position(this, widget_value);
-                    return;
-                }
-                if (widget_name === "animation") {
+                } else if (widget_name === "animation") {
                     apply_text_overlay_animation(this, widget_value);
-                    return;
+                } else {
+                    apply_effect_widget_uniform_from_widget(
+                        this,
+                        EFFECT_NAME,
+                        TEXT_OVERLAY_PARAM_SPECS,
+                        widget_name,
+                        widget_value,
+                    );
                 }
 
-                apply_effect_widget_uniform_from_widget(
-                    this,
-                    EFFECT_NAME,
-                    TEXT_OVERLAY_PARAM_SPECS,
-                    widget_name,
-                    widget_value,
-                );
+                if (TEXT_WIDGETS_THAT_REQUIRE_TEXTURE_REFRESH.has(widget_name)) {
+                    sync_text_overlay_preview_content(this, document_ref);
+                }
             };
         },
     });

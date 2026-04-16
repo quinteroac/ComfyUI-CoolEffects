@@ -300,6 +300,7 @@ export function create_webgl2_renderer(canvas_element) {
     let u_resolution_loc = null;
     let u_image_loc = null;
     let gl_texture = null;
+    const sampler_textures = new Map();
     const uniform_location_cache = new Map();
 
     const get_uniform_location = (name) => {
@@ -343,11 +344,18 @@ export function create_webgl2_renderer(canvas_element) {
         build_program(adapted);
     };
 
-    const set_image_texture = (image_source) => {
-        if (!image_source) return;
-        if (gl_texture) gl.deleteTexture(gl_texture);
-        gl_texture = gl.createTexture();
-        gl.bindTexture(gl.TEXTURE_2D, gl_texture);
+    const set_texture_from_source = (existing_texture, image_source) => {
+        if (!image_source) {
+            if (existing_texture) {
+                gl.deleteTexture(existing_texture);
+            }
+            return null;
+        }
+        if (existing_texture) {
+            gl.deleteTexture(existing_texture);
+        }
+        const next_texture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, next_texture);
         gl.texImage2D(
             gl.TEXTURE_2D,
             0,
@@ -364,6 +372,24 @@ export function create_webgl2_renderer(canvas_element) {
         );
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        return next_texture;
+    };
+
+    const set_image_texture = (image_source) => {
+        gl_texture = set_texture_from_source(gl_texture, image_source);
+    };
+
+    const set_sampler_texture = (uniform_name, image_source) => {
+        if (typeof uniform_name !== "string" || uniform_name.length === 0) {
+            return;
+        }
+        const existing_texture = sampler_textures.get(uniform_name) ?? null;
+        const next_texture = set_texture_from_source(existing_texture, image_source);
+        if (!next_texture) {
+            sampler_textures.delete(uniform_name);
+            return;
+        }
+        sampler_textures.set(uniform_name, next_texture);
     };
 
     const set_uniform = (name, value) => {
@@ -408,12 +434,30 @@ export function create_webgl2_renderer(canvas_element) {
             gl.bindTexture(gl.TEXTURE_2D, gl_texture);
             gl.uniform1i(u_image_loc, 0);
         }
+        let texture_unit = 1;
+        for (const [uniform_name, texture] of sampler_textures.entries()) {
+            if (!texture) {
+                continue;
+            }
+            const uniform_location = get_uniform_location(uniform_name);
+            if (uniform_location === null) {
+                continue;
+            }
+            gl.activeTexture(gl.TEXTURE0 + texture_unit);
+            gl.bindTexture(gl.TEXTURE_2D, texture);
+            gl.uniform1i(uniform_location, texture_unit);
+            texture_unit += 1;
+        }
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     };
 
     const dispose = () => {
         if (program) gl.deleteProgram(program);
         if (gl_texture) gl.deleteTexture(gl_texture);
+        for (const texture of sampler_textures.values()) {
+            gl.deleteTexture(texture);
+        }
+        sampler_textures.clear();
         gl.deleteBuffer(vbo);
     };
 
@@ -423,6 +467,7 @@ export function create_webgl2_renderer(canvas_element) {
     return {
         set_fragment_shader,
         set_image_texture,
+        set_sampler_texture,
         set_uniform,
         set_uniform_array,
         render,
@@ -475,6 +520,23 @@ export async function create_live_glsl_preview({
         renderer.set_image_texture(input_image);
     }
 
+    const bind_sampler_uniform_textures = () => {
+        if (!renderer || typeof renderer.set_sampler_texture !== "function") {
+            return;
+        }
+        const uniform_entries = Object.entries(preview_descriptor.uniforms);
+        for (const [uniform_name, uniform_value] of uniform_entries) {
+            if (
+                uniform_name === "u_image" ||
+                !uniform_value ||
+                typeof uniform_value !== "object"
+            ) {
+                continue;
+            }
+            renderer.set_sampler_texture(uniform_name, uniform_value);
+        }
+    };
+
     let active_shader_request_id = 0;
     const load_shader_for_effect = async (next_effect_name) => {
         const request_id = active_shader_request_id + 1;
@@ -486,7 +548,8 @@ export async function create_live_glsl_preview({
             preview_descriptor.fragment_shader_source = frag_source;
             if (renderer) {
                 renderer.set_fragment_shader(frag_source);
-                if (input_image) renderer.set_image_texture(input_image);
+                renderer.set_image_texture(preview_descriptor.uniforms.u_image ?? null);
+                bind_sampler_uniform_textures();
             }
             if (renderer || !keep_webgl_error_on_shader_load) {
                 preview_state.preview_error = "";
@@ -561,8 +624,20 @@ export async function create_live_glsl_preview({
         },
         set_input_image(next_image) {
             preview_descriptor.uniforms.u_image = next_image ?? null;
-            if (renderer && next_image) renderer.set_image_texture(next_image);
+            if (renderer) renderer.set_image_texture(next_image ?? null);
             update_overlay_message();
+        },
+        set_texture(uniform_name, texture_source) {
+            if (
+                typeof uniform_name !== "string" ||
+                uniform_name.length === 0
+            ) {
+                return;
+            }
+            preview_descriptor.uniforms[uniform_name] = texture_source ?? null;
+            if (renderer && typeof renderer.set_sampler_texture === "function") {
+                renderer.set_sampler_texture(uniform_name, texture_source ?? null);
+            }
         },
         async set_effect(next_effect_name) {
             preview_descriptor.effect_name = next_effect_name;
