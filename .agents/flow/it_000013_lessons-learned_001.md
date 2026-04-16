@@ -19,3 +19,13 @@
 **Pitfalls Encountered:** None significant; the main requirement was to update both backend and frontend default uniform maps so preview defaults and render defaults stay in sync.
 
 **Useful Context for Future Agents:** For any new effect, if preview appears static or inconsistent with render output, first compare `nodes/effect_params.py` defaults against `web/effect_node_widget.js` defaults; mismatches there are the most common source of confusion.
+
+## US-003 — Nodo Dolly In
+
+**Summary:** Implemented `CoolDollyInEffect` end-to-end with new backend node inputs (`dolly_strength`, `dolly_speed`, `focus_x`, `focus_y`), a dedicated `dolly_in` fragment shader, frontend live WebGL2 preview wiring, and registration/documentation updates.
+
+**Key Decisions:** Reused the shared `effect_node_widget` flow (same as other effect nodes) and added matching defaults in both `nodes/effect_params.py` and `web/effect_node_widget.js` so preview and video rendering stay aligned through `merge_params()`.
+
+**Pitfalls Encountered:** Python smoke checks can create noisy tracked/untracked `__pycache__` artifacts in this repo; they need cleanup before handing off changes.
+
+**Useful Context for Future Agents:** `CoolVideoGenerator` required no code changes for new effects—once `effect_name` is `"dolly_in"` and the shader/defaults are present, it renders automatically via dynamic shader loading and merged uniform params.
