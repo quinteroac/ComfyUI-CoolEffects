@@ -112,6 +112,12 @@ _vignette_effect_module = _load_module_from_path(
 )
 CoolVignetteEffect = _vignette_effect_module.CoolVignetteEffect
 
+_tilt_shift_effect_module = _load_module_from_path(
+    "cool_effects_tilt_shift_effect_runtime",
+    PACKAGE_ROOT / "nodes" / "tilt_shift_effect.py",
+)
+CoolTiltShiftEffect = _tilt_shift_effect_module.CoolTiltShiftEffect
+
 _pincushion_effect_module = _load_module_from_path(
     "cool_effects_pincushion_effect_runtime",
     PACKAGE_ROOT / "nodes" / "pincushion_effect.py",
@@ -201,6 +207,7 @@ NODE_CLASS_MAPPINGS = {
     "CoolFrostedGlassEffect": CoolFrostedGlassEffect,
     "CoolFisheyeEffect": CoolFisheyeEffect,
     "CoolVignetteEffect": CoolVignetteEffect,
+    "CoolTiltShiftEffect": CoolTiltShiftEffect,
     "CoolPincushionEffect": CoolPincushionEffect,
     "CoolChromaticAberrationEffect": CoolChromaticAberrationEffect,
     "CoolWaveformEffect": CoolWaveformEffect,
@@ -228,6 +235,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CoolFrostedGlassEffect": "Cool Frosted Glass Effect",
     "CoolFisheyeEffect": "Cool Fisheye Effect",
     "CoolVignetteEffect": "Cool Vignette Effect",
+    "CoolTiltShiftEffect": "Cool Tilt-Shift Effect",
     "CoolPincushionEffect": "Cool Pincushion Effect",
     "CoolChromaticAberrationEffect": "Cool Chromatic Aberration Effect",
     "CoolWaveformEffect": "Cool Waveform Effect",

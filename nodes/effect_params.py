@@ -81,6 +81,12 @@ DEFAULT_PARAMS: dict[str, dict] = {
         "u_radius": 0.75,
         "u_softness": 0.5,
     },
+    "tilt_shift": {
+        "u_focus_center": 0.5,
+        "u_focus_width": 0.2,
+        "u_blur_strength": 0.5,
+        "u_angle": 0.0,
+    },
     "pincushion": {
         "u_strength": 0.5,
         "u_zoom": 1.0,

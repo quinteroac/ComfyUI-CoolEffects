@@ -39,3 +39,13 @@
 **Pitfalls Encountered:** Running `compileall` generated `.pyc` churn in tracked and untracked `__pycache__` paths; cleaned all compiled artifacts to keep the working tree limited to intentional source/test changes.
 
 **Useful Context for Future Agents:** For any new effect, update all five surfaces together: `nodes/<effect>_effect.py`, `shaders/glsl/<effect>.frag`, defaults in `nodes/effect_params.py`, defaults in `web/effect_node_widget.js`, and `__init__.py` registration; adding a dedicated `web/<effect>_effect.js` wrapper keeps live-preview uniform tests straightforward and consistent with the current test style.
+
+## US-005 — Tilt-Shift Effect Node
+
+**Summary:** Added `CoolTiltShiftEffect` with `focus_center`, `focus_width`, `blur_strength`, and `angle` controls; implemented `shaders/glsl/tilt_shift.frag` with a Gaussian blur approximation that increases with distance from the rotated focus band; wired live preview support in `web/tilt_shift_effect.js`; registered the node in package mappings; synchronized tilt-shift defaults in backend/frontend uniform maps; and added backend/frontend tests including video-generator pipeline coverage.
+
+**Key Decisions:** Reused the existing effect-node integration template (dedicated node module + dedicated web extension + shared `effect_node_widget` preview plumbing) to keep behavior and maintenance aligned with prior effects; used axis-aligned separable Gaussian taps combined into a cross blur (`blur_x` + `blur_y`) to keep shader cost predictable while still producing a clear tilt-shift blur gradient; included `angle` as a real uniform in shader-space rotation so `0°` remains the default horizontal focus band while preserving forward compatibility for directional focus.
+
+**Pitfalls Encountered:** The environment still lacks `pytest`, so full Python test execution was not available in-session; Python validation had to rely on bytecode compilation while JS tests were executed normally.
+
+**Useful Context for Future Agents:** For any new effect that should render in both generator and live preview, defaults must be added in *both* `nodes/effect_params.py` and `web/effect_node_widget.js` or one side silently falls back to zeros; registration coverage should continue asserting `NODE_CLASS_MAPPINGS` and `NODE_DISPLAY_NAME_MAPPINGS` entries because ComfyUI discoverability depends on both.
