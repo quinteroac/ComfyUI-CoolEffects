@@ -17,6 +17,10 @@ DEFAULT_PARAMS: dict[str, dict] = {
         "u_pulse_amp": 0.06,
         "u_pulse_speed": 3.0,
     },
+    "zoom_in": {
+        "u_zoom_strength": 0.25,
+        "u_zoom_speed": 0.6,
+    },
     "bass_zoom": {
         "u_zoom_strength": 0.3,
         "u_smoothing": 0.5,
