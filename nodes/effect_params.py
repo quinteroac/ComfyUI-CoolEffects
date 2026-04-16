@@ -76,6 +76,10 @@ DEFAULT_PARAMS: dict[str, dict] = {
         "u_strength": 0.5,
         "u_zoom": 1.0,
     },
+    "pincushion": {
+        "u_strength": 0.5,
+        "u_zoom": 1.0,
+    },
     "pan_left": {
         "u_speed": 0.1,
         "u_origin_x": 0.0,

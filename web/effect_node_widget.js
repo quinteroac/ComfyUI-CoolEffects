@@ -110,6 +110,10 @@ const EFFECT_DEFAULT_UNIFORMS = Object.freeze({
         u_strength: 0.5,
         u_zoom: 1.0,
     }),
+    pincushion: Object.freeze({
+        u_strength: 0.5,
+        u_zoom: 1.0,
+    }),
     waveform: Object.freeze({
         u_line_thickness: 0.005,
         u_waveform_height: 0.2,
