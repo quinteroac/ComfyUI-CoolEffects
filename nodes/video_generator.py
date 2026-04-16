@@ -228,21 +228,29 @@ def _render_frames(
             vertex_shader=vertex_shader_source,
             fragment_shader=fragment_shader_source,
         )
-        input_texture = ctx.texture((width, height), 3, source_frames[0].tobytes())
+        # Flip frames vertically before uploading: OpenGL's texture origin is bottom-left,
+        # so flipping here makes GL top = image top, which matches the WebGL preview Y axis.
+        input_texture = ctx.texture((width, height), 3, source_frames[0][::-1].tobytes())
         output_renderbuffer = ctx.renderbuffer((width, height), components=3)
         fbo = ctx.framebuffer(color_attachments=[output_renderbuffer])
         vbo = ctx.buffer(_FULLSCREEN_QUAD_VERTICES.tobytes())
         vao = ctx.simple_vertex_array(program, vbo, "in_pos")
 
         input_texture.use(location=0)
-        program["u_image"].value = 0
-        program["u_resolution"].value = (width, height)
+        try:
+            program["u_image"].value = 0
+        except KeyError:
+            pass
+        try:
+            program["u_resolution"].value = (width, height)
+        except KeyError:
+            pass
         active_source_frame_index = 0
 
         for frame_index in range(frame_count):
             source_frame_index = frame_index % source_frame_count
             if source_frame_index != active_source_frame_index:
-                input_texture.write(source_frames[source_frame_index].tobytes())
+                input_texture.write(source_frames[source_frame_index][::-1].tobytes())
                 active_source_frame_index = source_frame_index
             for uniform_name, uniform_value in final_uniform_params.items():
                 _set_program_uniform(program, uniform_name, uniform_value)
@@ -281,11 +289,17 @@ def _render_frames(
                     program["u_waveform"].value = waveform_samples
                 except KeyError:
                     pass
-            program["u_time"].value = frame_index / fps
+            try:
+                program["u_time"].value = frame_index / fps
+            except KeyError:
+                pass
             fbo.use()
             vao.render(moderngl.TRIANGLES)
             frame_bytes = fbo.read(components=3)
-            frame_array = np.frombuffer(frame_bytes, dtype=np.uint8).reshape(height, width, 3)
+            # fbo.read() returns rows bottom-to-top (OpenGL convention). Flip vertically
+            # so row 0 = top of image, matching ComfyUI's expected tensor layout and
+            # making GL Y coordinates consistent with the WebGL preview.
+            frame_array = np.frombuffer(frame_bytes, dtype=np.uint8).reshape(height, width, 3)[::-1].copy()
             frame_normalized = frame_array.astype(np.float32) / np.float32(255.0)
             rendered_frames.append(torch.from_numpy(frame_normalized))
 
