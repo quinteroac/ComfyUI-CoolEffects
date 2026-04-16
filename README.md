@@ -18,8 +18,9 @@ ComfyUI-CoolEffects is a custom node package for applying GLSL-driven effects to
 - `CoolWaveformEffect`: outputs waveform `EFFECT_PARAMS` from line color/thickness/height/position/opacity controls and includes an always-animated oscilloscope preview signal.
 - `CoolWaterDropsEffect`: outputs water-drops `EFFECT_PARAMS` from drop density/size/fall/refraction/gravity/wind controls.
 - `CoolFrostedGlassEffect`: outputs frosted-glass `EFFECT_PARAMS` from frost intensity/blur/uniformity/tint/condensation controls.
+- `CoolTextOverlayEffect`: outputs text-overlay `EFFECT_PARAMS` from text/font/color/position controls and includes a live preview widget.
 - `CoolVideoGenerator`: renders shader-driven frame batches from an input image and accepts chained `effect_params_1`…`effect_params_8` inputs.
-- `CoolVideoPlayer`: accepts a `VIDEO` input and previews decoded frames in an embedded canvas widget.ment, and opacity, plus an inline canvas preview for first-frame text composition.
+- `CoolVideoPlayer`: accepts a `VIDEO` input and previews decoded frames in an embedded canvas widget.
 
 ## Shader architecture
 

@@ -65,6 +65,52 @@ def test_text_overlay_inputs_cover_appearance_controls():
         "FLOAT",
         {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01},
     )
+    assert required_inputs["position"] == (
+        [
+            "top-left",
+            "top-center",
+            "top-right",
+            "center",
+            "bottom-left",
+            "bottom-center",
+            "bottom-right",
+        ],
+        {"default": "bottom-center"},
+    )
+    assert required_inputs["offset_x"] == (
+        "FLOAT",
+        {"default": 0.0, "min": -1.0, "max": 1.0, "step": 0.01},
+    )
+    assert required_inputs["offset_y"] == (
+        "FLOAT",
+        {"default": 0.0, "min": -1.0, "max": 1.0, "step": 0.01},
+    )
+
+
+def test_execute_outputs_position_and_offsets():
+    module = _load_module(
+        "cool_effects_text_overlay_effect_execute_test",
+        REPO_ROOT / "nodes" / "text_overlay_effect.py",
+    )
+
+    node = module.CoolTextOverlayEffect()
+    (effect_params,) = node.execute(
+        text="caption",
+        font="dejavu_sans.ttf",
+        font_size=52,
+        color_r=0.1,
+        color_g=0.2,
+        color_b=0.3,
+        opacity=0.9,
+        position="top-right",
+        offset_x=0.25,
+        offset_y=-0.15,
+    )
+
+    assert effect_params["effect_name"] == "text_overlay"
+    assert effect_params["params"]["position"] == "top-right"
+    assert effect_params["params"]["offset_x"] == 0.25
+    assert effect_params["params"]["offset_y"] == -0.15
 
 
 def test_font_combo_uses_alphabetical_ttf_scan_order(tmp_path: Path):

@@ -39,6 +39,15 @@ def _scan_font_options(fonts_dir: Path) -> list[str]:
 
 
 _FONT_OPTIONS = _scan_font_options(_FONTS_DIR)
+_POSITION_OPTIONS = [
+    "top-left",
+    "top-center",
+    "top-right",
+    "center",
+    "bottom-left",
+    "bottom-center",
+    "bottom-right",
+]
 
 
 class CoolTextOverlayEffect:
@@ -53,6 +62,9 @@ class CoolTextOverlayEffect:
                 "color_g": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "color_b": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "opacity": ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01}),
+                "position": (_POSITION_OPTIONS, {"default": "bottom-center"}),
+                "offset_x": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 1.0, "step": 0.01}),
+                "offset_y": ("FLOAT", {"default": 0.0, "min": -1.0, "max": 1.0, "step": 0.01}),
             }
         }
 
@@ -61,7 +73,19 @@ class CoolTextOverlayEffect:
     FUNCTION = "execute"
     CATEGORY = "CoolEffects"
 
-    def execute(self, text, font, font_size, color_r, color_g, color_b, opacity):
+    def execute(
+        self,
+        text,
+        font,
+        font_size,
+        color_r,
+        color_g,
+        color_b,
+        opacity,
+        position,
+        offset_x,
+        offset_y,
+    ):
         return (
             build_effect_params(
                 "text_overlay",
@@ -73,6 +97,9 @@ class CoolTextOverlayEffect:
                     "color_g": color_g,
                     "color_b": color_b,
                     "opacity": opacity,
+                    "position": position,
+                    "offset_x": offset_x,
+                    "offset_y": offset_y,
                 },
             ),
         )

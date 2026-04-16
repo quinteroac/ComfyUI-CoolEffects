@@ -106,6 +106,12 @@ _waveform_effect_module = _load_module_from_path(
 )
 CoolWaveformEffect = _waveform_effect_module.CoolWaveformEffect
 
+_text_overlay_effect_module = _load_module_from_path(
+    "cool_effects_text_overlay_effect_runtime",
+    PACKAGE_ROOT / "nodes" / "text_overlay_effect.py",
+)
+CoolTextOverlayEffect = _text_overlay_effect_module.CoolTextOverlayEffect
+
 _pan_left_effect_module = _load_module_from_path(
     "cool_effects_pan_left_effect_runtime",
     PACKAGE_ROOT / "nodes" / "pan_left_effect.py",
@@ -170,6 +176,7 @@ NODE_CLASS_MAPPINGS = {
     "CoolWaterDropsEffect": CoolWaterDropsEffect,
     "CoolFrostedGlassEffect": CoolFrostedGlassEffect,
     "CoolWaveformEffect": CoolWaveformEffect,
+    "CoolTextOverlayEffect": CoolTextOverlayEffect,
     "CoolPanLeftEffect": CoolPanLeftEffect,
     "CoolPanRightEffect": CoolPanRightEffect,
     "CoolPanUpEffect": CoolPanUpEffect,
@@ -192,6 +199,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CoolWaterDropsEffect": "Cool Water Drops Effect",
     "CoolFrostedGlassEffect": "Cool Frosted Glass Effect",
     "CoolWaveformEffect": "Cool Waveform Effect",
+    "CoolTextOverlayEffect": "Cool Text Overlay Effect",
     "CoolPanLeftEffect": "Cool Pan Left Effect",
     "CoolPanRightEffect": "Cool Pan Right Effect",
     "CoolPanUpEffect": "Cool Pan Up Effect",
