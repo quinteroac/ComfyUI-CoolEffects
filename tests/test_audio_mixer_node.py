@@ -37,11 +37,19 @@ def _cleanup_fake_torchaudio() -> None:
     sys.modules.pop("torchaudio", None)
 
 
-def test_audio_mixer_node_has_directory_path_string_input():
+def test_audio_mixer_node_has_transition_inputs():
     module = _load_module("cool_effects_audio_mixer_inputs_test", "nodes/audio_mixer.py")
     required_inputs = module.CoolAudioMixer.INPUT_TYPES()["required"]
 
     assert required_inputs["directory_path"] == ("STRING", {"default": ""})
+    assert required_inputs["transition_type"] == (
+        ["crossfade", "hard_cut", "fade_to_silence"],
+        {"default": "crossfade"},
+    )
+    assert required_inputs["transition_duration"] == (
+        "FLOAT",
+        {"default": 1.0, "min": 0.1, "max": 10.0, "step": 0.1},
+    )
 
 
 def test_audio_mixer_scans_case_insensitive_extensions_and_loads_sorted_files(tmp_path):
@@ -56,12 +64,18 @@ def test_audio_mixer_scans_case_insensitive_extensions_and_loads_sorted_files(tm
     try:
         module = _load_module("cool_effects_audio_mixer_scan_test", "nodes/audio_mixer.py")
         node = module.CoolAudioMixer()
-        (loaded_tracks,) = node.execute(directory_path=str(tmp_path))
+        (loaded_tracks,) = node.execute(
+            directory_path=str(tmp_path),
+            transition_type="fade_to_silence",
+            transition_duration=2.5,
+        )
 
         assert call_order == ["a_song.wav", "B_song.MP3", "c_song.FlAc", "d_song.ogg"]
         assert [track["filename"] for track in loaded_tracks] == call_order
         assert [track["sample_rate"] for track in loaded_tracks] == [44_100, 44_100, 44_100, 44_100]
         assert all(isinstance(track["waveform"], torch.Tensor) for track in loaded_tracks)
+        assert all(track["transition_type"] == "fade_to_silence" for track in loaded_tracks)
+        assert all(track["transition_duration_seconds"] == 2.5 for track in loaded_tracks)
     finally:
         _cleanup_fake_torchaudio()
 
@@ -95,6 +109,35 @@ def test_audio_mixer_raises_when_directory_does_not_exist(tmp_path):
 
     assert "does not exist" in message
     assert str(missing_path) in message
+
+
+def test_audio_mixer_ignores_transition_duration_for_hard_cut(tmp_path):
+    (tmp_path / "a_song.wav").write_bytes(b"track-a")
+    (tmp_path / "b_song.wav").write_bytes(b"track-b")
+
+    call_order: list[str] = []
+    _install_fake_torchaudio(call_order)
+    try:
+        module = _load_module("cool_effects_audio_mixer_hard_cut_test", "nodes/audio_mixer.py")
+        node = module.CoolAudioMixer()
+        (short_duration_tracks,) = node.execute(
+            directory_path=str(tmp_path),
+            transition_type="hard_cut",
+            transition_duration=0.1,
+        )
+        (long_duration_tracks,) = node.execute(
+            directory_path=str(tmp_path),
+            transition_type="hard_cut",
+            transition_duration=9.5,
+        )
+    finally:
+        _cleanup_fake_torchaudio()
+
+    assert [track["filename"] for track in short_duration_tracks] == [track["filename"] for track in long_duration_tracks]
+    assert all(track["transition_type"] == "hard_cut" for track in short_duration_tracks)
+    assert all(track["transition_type"] == "hard_cut" for track in long_duration_tracks)
+    assert all(track["transition_duration_seconds"] == 0.0 for track in short_duration_tracks)
+    assert all(track["transition_duration_seconds"] == 0.0 for track in long_duration_tracks)
 
 
 def test_audio_mixer_is_registered_in_package_mappings():

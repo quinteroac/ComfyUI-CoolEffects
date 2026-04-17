@@ -4,6 +4,7 @@ from pathlib import Path
 
 
 _SUPPORTED_AUDIO_EXTENSIONS = {".wav", ".mp3", ".flac", ".ogg"}
+_TRANSITION_TYPE_OPTIONS = ["crossfade", "hard_cut", "fade_to_silence"]
 
 
 def _resolve_audio_file_paths(directory_path: str) -> list[Path]:
@@ -53,12 +54,30 @@ def _load_audio_files(audio_paths: list[Path]) -> list[dict]:
     return loaded_tracks
 
 
+def _resolve_effective_transition_duration(transition_type: str, transition_duration: float) -> float:
+    if transition_type not in _TRANSITION_TYPE_OPTIONS:
+        raise ValueError(
+            f"Unsupported transition_type: {transition_type}. "
+            f"Expected one of: {', '.join(_TRANSITION_TYPE_OPTIONS)}"
+        )
+
+    if transition_type == "hard_cut":
+        return 0.0
+
+    return float(transition_duration)
+
+
 class CoolAudioMixer:
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
                 "directory_path": ("STRING", {"default": ""}),
+                "transition_type": (_TRANSITION_TYPE_OPTIONS, {"default": "crossfade"}),
+                "transition_duration": (
+                    "FLOAT",
+                    {"default": 1.0, "min": 0.1, "max": 10.0, "step": 0.1},
+                ),
             }
         }
 
@@ -67,7 +86,13 @@ class CoolAudioMixer:
     FUNCTION = "execute"
     CATEGORY = "CoolEffects/audio"
 
-    def execute(self, directory_path):
+    def execute(self, directory_path, transition_type="crossfade", transition_duration=1.0):
         audio_paths = _resolve_audio_file_paths(directory_path)
         loaded_tracks = _load_audio_files(audio_paths)
+        effective_transition_duration = _resolve_effective_transition_duration(
+            transition_type, transition_duration
+        )
+        for track in loaded_tracks:
+            track["transition_type"] = transition_type
+            track["transition_duration_seconds"] = effective_transition_duration
         return (loaded_tracks,)
