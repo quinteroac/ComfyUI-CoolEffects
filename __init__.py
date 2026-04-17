@@ -22,6 +22,12 @@ _shader_loader_module = _load_module_from_path(
 )
 list_shaders = _shader_loader_module.list_shaders
 
+_lut_utils_module = _load_module_from_path(
+    "cool_effects_lut_utils_runtime", PACKAGE_ROOT / "nodes" / "lut_utils.py"
+)
+parse_cube_lut_file = _lut_utils_module.parse_cube_lut_file
+lut_strip_to_uint8 = _lut_utils_module.lut_strip_to_uint8
+
 _effect_selector_module = _load_module_from_path(
     "cool_effects_effect_selector_runtime",
     PACKAGE_ROOT / "nodes" / "effect_selector.py",
@@ -160,6 +166,12 @@ _curves_effect_module = _load_module_from_path(
 )
 CoolCurvesEffect = _curves_effect_module.CoolCurvesEffect
 
+_lut_effect_module = _load_module_from_path(
+    "cool_effects_lut_effect_runtime",
+    PACKAGE_ROOT / "nodes" / "lut_effect.py",
+)
+CoolLUTEffect = _lut_effect_module.CoolLUTEffect
+
 _tone_mapping_effect_module = _load_module_from_path(
     "cool_effects_tone_mapping_effect_runtime",
     PACKAGE_ROOT / "nodes" / "tone_mapping_effect.py",
@@ -251,6 +263,7 @@ NODE_CLASS_MAPPINGS = {
     "CoolColorTemperatureEffect": CoolColorTemperatureEffect,
     "CoolColorBalanceEffect": CoolColorBalanceEffect,
     "CoolCurvesEffect": CoolCurvesEffect,
+    "CoolLUTEffect": CoolLUTEffect,
     "CoolToneMappingEffect": CoolToneMappingEffect,
     "CoolWaveformEffect": CoolWaveformEffect,
     "CoolTextOverlayEffect": CoolTextOverlayEffect,
@@ -285,6 +298,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CoolColorTemperatureEffect": "Cool Color Temperature Effect",
     "CoolColorBalanceEffect": "Cool Color Balance Effect",
     "CoolCurvesEffect": "Cool Curves (Lift / Gamma / Gain) Effect",
+    "CoolLUTEffect": "Cool LUT Effect",
     "CoolToneMappingEffect": "Cool Tone Mapping Effect",
     "CoolWaveformEffect": "Cool Waveform Effect",
     "CoolTextOverlayEffect": "Cool Text Overlay Effect",
@@ -302,8 +316,8 @@ if CoolVideoGenerator is not None:
 
 
 class _JsonResponseFallback:
-    def __init__(self, payload):
-        self.status = 200
+    def __init__(self, payload, status=200):
+        self.status = status
         self.content_type = "application/json"
         self.text = json.dumps(payload)
 
@@ -345,6 +359,38 @@ async def get_shader(request):
     return web.Response(text=shader_path.read_text(encoding="utf-8"), content_type="text/plain")
 
 
+async def get_lut(request):
+    lut_path = request.query.get("path", "")
+    try:
+        parsed_lut = parse_cube_lut_file(lut_path)
+    except ValueError as error:
+        try:
+            from aiohttp import web
+        except ImportError:
+            return _JsonResponseFallback({"error": str(error)}, status=400)
+        raise web.HTTPBadRequest(reason=str(error)) from error
+
+    strip_uint8 = lut_strip_to_uint8(parsed_lut["strip"])
+    strip_height = len(strip_uint8)
+    strip_width = len(strip_uint8[0]) if strip_height > 0 else 0
+    strip_flat = [channel for row in strip_uint8 for pixel in row for channel in pixel]
+    payload = {
+        "path": parsed_lut["resolved_path"],
+        "size": parsed_lut["size"],
+        "domain_min": list(parsed_lut["domain_min"]),
+        "domain_max": list(parsed_lut["domain_max"]),
+        "strip_width": strip_width,
+        "strip_height": strip_height,
+        "strip": strip_flat,
+    }
+
+    try:
+        from aiohttp import web
+    except ImportError:
+        return _JsonResponseFallback(payload)
+    return web.json_response(payload)
+
+
 def _register_routes() -> None:
     try:
         from server import PromptServer
@@ -365,6 +411,7 @@ def _register_routes() -> None:
 
     routes.get("/cool_effects/shaders")(get_shaders)
     routes.get("/cool_effects/shaders/{name}")(get_shader)
+    routes.get("/cool_effects/lut")(get_lut)
     setattr(routes, "_cool_effects_shader_list_registered", True)
 
 

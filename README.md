@@ -28,6 +28,7 @@ ComfyUI-CoolEffects is a custom node package for applying GLSL-driven effects to
 - `CoolColorTemperatureEffect`: outputs color-temperature `EFFECT_PARAMS` from temperature/tint controls and includes a live preview widget.
 - `CoolColorBalanceEffect`: outputs color-balance `EFFECT_PARAMS` from independent shadows/midtones/highlights RGB tint controls and includes a live preview widget.
 - `CoolCurvesEffect`: outputs curves `EFFECT_PARAMS` from lift/gamma/gain controls and includes a live preview widget.
+- `CoolLUTEffect`: outputs LUT `EFFECT_PARAMS` from a `.cube` LUT path plus intensity control and includes a live preview widget.
 - `CoolToneMappingEffect`: outputs tone-mapping `EFFECT_PARAMS` for none/BW/sepia/duotone modes with intensity + duotone shadow/highlight color controls and includes a live preview widget.
 - `CoolTextOverlayEffect`: outputs text-overlay `EFFECT_PARAMS` from text/font/color/position/animation controls and includes a live preview widget.
 - `CoolVideoGenerator`: renders shader-driven frame batches from an input image and accepts chained `effect_params_1`…`effect_params_8` inputs.
@@ -38,6 +39,7 @@ ComfyUI-CoolEffects is a custom node package for applying GLSL-driven effects to
 - Shared shader files live in `shaders/glsl/*.frag`.
 - Python backend loads shaders through `shaders/loader.py`.
 - Frontend shader list is fetched from `GET /cool_effects/shaders`.
+- LUT payloads for live preview are fetched from `GET /cool_effects/lut?path=...`.
 
 ## Development notes
 

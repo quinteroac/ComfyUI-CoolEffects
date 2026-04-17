@@ -64,6 +64,17 @@ _AUDIO_UTILS_SPEC.loader.exec_module(_audio_utils_module)
 extract_audio_features = _audio_utils_module.extract_audio_features
 WAVEFORM_SAMPLE_COUNT = _audio_utils_module.WAVEFORM_SAMPLE_COUNT
 
+_LUT_UTILS_PATH = Path(__file__).resolve().parent / "lut_utils.py"
+_LUT_UTILS_SPEC = importlib.util.spec_from_file_location(
+    "cool_effects_lut_utils_for_video_generator", _LUT_UTILS_PATH
+)
+if _LUT_UTILS_SPEC is None or _LUT_UTILS_SPEC.loader is None:
+    raise ValueError(f"Missing LUT utils config at {_LUT_UTILS_PATH}")
+_lut_utils_module = importlib.util.module_from_spec(_LUT_UTILS_SPEC)
+_LUT_UTILS_SPEC.loader.exec_module(_lut_utils_module)
+create_identity_lut_strip = _lut_utils_module.create_identity_lut_strip
+parse_cube_lut_file = _lut_utils_module.parse_cube_lut_file
+
 _FULLSCREEN_QUAD_VERTICES = np.array(
     [-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, -1.0, 1.0, 1.0, -1.0, 1.0, 1.0],
     dtype="f4",
@@ -462,7 +473,21 @@ def _render_frames(
     frame_count = round(duration * fps)
     resolved_audio_features = audio_features or []
 
-    ctx = program = input_texture = output_renderbuffer = fbo = vbo = vao = None
+    lut_payload = None
+    if effect_name == "lut":
+        lut_path = str(effect_params["params"].get("lut_path", "")).strip()
+        if lut_path:
+            lut_payload = parse_cube_lut_file(lut_path)
+        else:
+            lut_strip = create_identity_lut_strip(16)
+            lut_payload = {
+                "size": 16,
+                "domain_min": (0.0, 0.0, 0.0),
+                "domain_max": (1.0, 1.0, 1.0),
+                "strip": lut_strip,
+            }
+
+    ctx = program = input_texture = lut_texture = output_renderbuffer = fbo = vbo = vao = None
     rendered_frames = []
 
     try:
@@ -474,20 +499,42 @@ def _render_frames(
         # Flip frames vertically before uploading: OpenGL's texture origin is bottom-left,
         # so flipping here makes GL top = image top, which matches the WebGL preview Y axis.
         input_texture = ctx.texture((width, height), 3, source_frames[0][::-1].tobytes())
+        if lut_payload is not None:
+            lut_strip = np.asarray(lut_payload["strip"], dtype="f4")
+            lut_texture = ctx.texture(
+                (int(lut_strip.shape[1]), int(lut_strip.shape[0])),
+                3,
+                lut_strip.tobytes(),
+                dtype="f4",
+            )
+            lut_texture.filter = (moderngl.LINEAR, moderngl.LINEAR)
+            lut_texture.repeat_x = False
+            lut_texture.repeat_y = False
         output_renderbuffer = ctx.renderbuffer((width, height), components=3)
         fbo = ctx.framebuffer(color_attachments=[output_renderbuffer])
         vbo = ctx.buffer(_FULLSCREEN_QUAD_VERTICES.tobytes())
         vao = ctx.simple_vertex_array(program, vbo, "in_pos")
 
         input_texture.use(location=0)
+        if lut_texture is not None:
+            lut_texture.use(location=1)
         try:
             program["u_image"].value = 0
         except KeyError:
             pass
+        if lut_texture is not None:
+            try:
+                program["u_lut_texture"].value = 1
+            except KeyError:
+                pass
         try:
             program["u_resolution"].value = (width, height)
         except KeyError:
             pass
+        if lut_payload is not None:
+            _set_program_uniform(program, "u_lut_size", float(lut_payload["size"]))
+            _set_program_uniform(program, "u_domain_min", tuple(lut_payload["domain_min"]))
+            _set_program_uniform(program, "u_domain_max", tuple(lut_payload["domain_max"]))
         active_source_frame_index = 0
 
         for frame_index in range(frame_count):
@@ -548,7 +595,7 @@ def _render_frames(
             return torch.stack(rendered_frames, dim=0)
         return torch.empty((0, height, width, 3), dtype=torch.float32)
     finally:
-        for resource in (vao, vbo, fbo, output_renderbuffer, input_texture, program):
+        for resource in (vao, vbo, fbo, output_renderbuffer, lut_texture, input_texture, program):
             if resource is not None:
                 resource.release()
         if ctx is not None:

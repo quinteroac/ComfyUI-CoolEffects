@@ -59,3 +59,13 @@
 **Pitfalls Encountered:** Python `pytest` is still unavailable in this environment (`No module named pytest`), so automated Python test execution could not run here; validation relied on JS tests plus Python compile/smoke checks.
 
 **Useful Context for Future Agents:** For effects with COMBO/string controls, keep the node’s string input and convert to numeric uniforms in both Python (`execute`) and JS (`map_*_to_uniform_value`) so preview updates remain real-time and backend/video rendering stays deterministic; also keep identity defaults aligned in `nodes/effect_params.py`, `web/effect_node_widget.js`, and effect param specs to avoid preview/render drift.
+
+## US-007 — LUT Application Effect Node
+
+**Summary:** Added `CoolLUTEffect` with `lut_path` + `intensity` inputs and `EFFECT_PARAMS` output, implemented `.cube` LUT parsing utilities, added a dedicated LUT shader (`lut.frag`) with intensity blending, wired backend LUT strip upload in `CoolVideoGenerator`, added HTTP LUT payload endpoint (`/cool_effects/lut`), integrated live WebGL2 LUT preview (`web/lut_effect.js`), and added Python/JS tests plus a sample LUT fixture.
+
+**Key Decisions:** Implemented LUT sampling as a flattened 2D strip texture (accepted by the AC as an alternative to 3D texture) for compatibility across backend ModernGL and frontend WebGL2 preview; resolved relative LUT paths against both CWD and package root for practical workflow compatibility; hardened preview updates by falling back to cleared LUT state when fetch/parse fails.
+
+**Pitfalls Encountered:** Importing LUT helpers from package entrypoint initially created an unintended hard dependency on `numpy`; refactoring `nodes/lut_utils.py` to pure-Python data structures avoided breaking package import when optional runtime deps are missing.
+
+**Useful Context for Future Agents:** For any effect that needs non-scalar shader data (textures, arrays), reuse `preview_controller.set_texture()`/`set_uniform_array()` in the shared preview pipeline and expose backend-derived payloads through explicit HTTP routes so widget-side updates stay real-time without embedding large blobs in node outputs.
