@@ -23,6 +23,7 @@ ComfyUI-CoolEffects is a custom node package for applying GLSL-driven effects to
 - `CoolTiltShiftEffect`: outputs tilt-shift `EFFECT_PARAMS` from focus-center/focus-width/blur-strength/angle controls and includes a live preview widget.
 - `CoolPincushionEffect`: outputs pincushion `EFFECT_PARAMS` from strength/zoom controls and includes a live preview widget.
 - `CoolChromaticAberrationEffect`: outputs chromatic-aberration `EFFECT_PARAMS` from strength/radial controls and includes a live preview widget.
+- `CoolBrightnessContrastEffect`: outputs brightness/contrast `EFFECT_PARAMS` from brightness/contrast controls and includes a live preview widget.
 - `CoolTextOverlayEffect`: outputs text-overlay `EFFECT_PARAMS` from text/font/color/position/animation controls and includes a live preview widget.
 - `CoolVideoGenerator`: renders shader-driven frame batches from an input image and accepts chained `effect_params_1`…`effect_params_8` inputs.
 - `CoolVideoPlayer`: accepts a `VIDEO` input and previews decoded frames in an embedded canvas widget.

@@ -129,6 +129,10 @@ const EFFECT_DEFAULT_UNIFORMS = Object.freeze({
         u_strength: 0.01,
         u_radial: 1.0,
     }),
+    brightness_contrast: Object.freeze({
+        u_brightness: 0.0,
+        u_contrast: 0.0,
+    }),
     waveform: Object.freeze({
         u_line_thickness: 0.005,
         u_waveform_height: 0.2,

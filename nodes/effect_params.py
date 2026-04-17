@@ -95,6 +95,10 @@ DEFAULT_PARAMS: dict[str, dict] = {
         "u_strength": 0.01,
         "u_radial": 1.0,
     },
+    "brightness_contrast": {
+        "u_brightness": 0.0,
+        "u_contrast": 0.0,
+    },
     "pan_left": {
         "u_speed": 0.1,
         "u_origin_x": 0.0,
