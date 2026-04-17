@@ -148,6 +148,12 @@ _color_temperature_effect_module = _load_module_from_path(
 )
 CoolColorTemperatureEffect = _color_temperature_effect_module.CoolColorTemperatureEffect
 
+_color_balance_effect_module = _load_module_from_path(
+    "cool_effects_color_balance_effect_runtime",
+    PACKAGE_ROOT / "nodes" / "color_balance_effect.py",
+)
+CoolColorBalanceEffect = _color_balance_effect_module.CoolColorBalanceEffect
+
 _curves_effect_module = _load_module_from_path(
     "cool_effects_curves_effect_runtime",
     PACKAGE_ROOT / "nodes" / "curves_effect.py",
@@ -237,6 +243,7 @@ NODE_CLASS_MAPPINGS = {
     "CoolBrightnessContrastEffect": CoolBrightnessContrastEffect,
     "CoolHSLEffect": CoolHSLEffect,
     "CoolColorTemperatureEffect": CoolColorTemperatureEffect,
+    "CoolColorBalanceEffect": CoolColorBalanceEffect,
     "CoolCurvesEffect": CoolCurvesEffect,
     "CoolWaveformEffect": CoolWaveformEffect,
     "CoolTextOverlayEffect": CoolTextOverlayEffect,
@@ -269,6 +276,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CoolBrightnessContrastEffect": "Cool Brightness / Contrast Effect",
     "CoolHSLEffect": "Cool HSL Effect",
     "CoolColorTemperatureEffect": "Cool Color Temperature Effect",
+    "CoolColorBalanceEffect": "Cool Color Balance Effect",
     "CoolCurvesEffect": "Cool Curves (Lift / Gamma / Gain) Effect",
     "CoolWaveformEffect": "Cool Waveform Effect",
     "CoolTextOverlayEffect": "Cool Text Overlay Effect",

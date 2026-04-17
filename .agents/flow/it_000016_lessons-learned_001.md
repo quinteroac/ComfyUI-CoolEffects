@@ -39,3 +39,13 @@
 **Pitfalls Encountered:** As with prior stories, `pytest` is unavailable in this environment, so Python test execution cannot be run end-to-end here; validation must combine JS tests plus Python syntax checks.
 
 **Useful Context for Future Agents:** For lift/gamma/gain style controls, keep default identities aligned in three places (`nodes/effect_params.py`, `web/effect_node_widget.js`, and per-effect JS param specs) so both WebGL preview initialization and video-render defaults remain behaviorally consistent.
+
+## US-005 — Color Balance Effect Node
+
+**Summary:** Added `CoolColorBalanceEffect` with nine FLOAT controls for shadows/midtones/highlights RGB tinting, `EFFECT_PARAMS` output wiring, a new shared GLSL shader (`color_balance.frag`), live WebGL2 preview extension (`web/color_balance_effect.js`), package registration, synchronized default uniforms, and Python/JS tests for node contract, registration, identity defaults, widget uniform sync, and video-generator pipeline integration.
+
+**Key Decisions:** Followed the established per-effect architecture using effect key `color_balance`; mapped each UI control to explicit channel uniforms (`u_shadows_*`, `u_midtones_*`, `u_highlights_*`); implemented tonal weighting in shader from luma-derived shadows/midtones/highlights masks so split-toning applies predictably while all-zero controls remain an identity path.
+
+**Pitfalls Encountered:** The environment still does not provide a `python` executable (only `python3`), and full pytest remains blocked by missing runtime deps in this environment, so validation needs `python3`-based checks plus JS test execution.
+
+**Useful Context for Future Agents:** For multi-control color effects, keep param/default parity in all three locations (`nodes/effect_params.py`, `web/effect_node_widget.js`, and per-effect `*_PARAM_SPECS`) and assert identity behavior in both node output tests and shader-string contract tests to catch backend/frontend drift early.

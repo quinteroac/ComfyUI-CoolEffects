@@ -108,6 +108,17 @@ DEFAULT_PARAMS: dict[str, dict] = {
         "u_temperature": 0.0,
         "u_tint": 0.0,
     },
+    "color_balance": {
+        "u_shadows_r": 0.0,
+        "u_shadows_g": 0.0,
+        "u_shadows_b": 0.0,
+        "u_midtones_r": 0.0,
+        "u_midtones_g": 0.0,
+        "u_midtones_b": 0.0,
+        "u_highlights_r": 0.0,
+        "u_highlights_g": 0.0,
+        "u_highlights_b": 0.0,
+    },
     "curves": {
         "u_lift": 0.0,
         "u_gamma": 1.0,
