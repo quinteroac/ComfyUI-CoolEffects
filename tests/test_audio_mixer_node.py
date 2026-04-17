@@ -19,17 +19,36 @@ def _load_module(module_name: str, relative_path: str):
     return module
 
 
-def _install_fake_torchaudio(call_order: list[str]) -> None:
+def _install_fake_torchaudio(
+    call_order: list[str],
+    *,
+    track_specs: dict[str, dict] | None = None,
+    resample_calls: list[tuple[int, int]] | None = None,
+) -> None:
     fake_torchaudio = types.ModuleType("torchaudio")
 
     def _fake_load(path: str):
         file_name = Path(path).name
         call_order.append(file_name)
-        track_index = len(call_order)
-        waveform = torch.full((2, 8), float(track_index), dtype=torch.float32)
-        return waveform, 44_100
+        if track_specs is None:
+            track_index = len(call_order)
+            waveform = torch.full((2, 8), float(track_index), dtype=torch.float32)
+            return waveform, 44_100
+        track_spec = track_specs[file_name]
+        return track_spec["waveform"].clone(), int(track_spec["sample_rate"])
+
+    def _fake_resample(waveform: torch.Tensor, orig_freq: int, new_freq: int):
+        if resample_calls is not None:
+            resample_calls.append((int(orig_freq), int(new_freq)))
+        if int(orig_freq) == int(new_freq):
+            return waveform
+        source_samples = waveform.shape[1]
+        target_samples = int(round(source_samples * (float(new_freq) / float(orig_freq))))
+        sample_indices = torch.linspace(0, source_samples - 1, target_samples).round().long()
+        return waveform[:, sample_indices]
 
     fake_torchaudio.load = _fake_load
+    fake_torchaudio.functional = types.SimpleNamespace(resample=_fake_resample)
     sys.modules["torchaudio"] = fake_torchaudio
 
 
@@ -67,7 +86,7 @@ def test_audio_mixer_scans_case_insensitive_extensions_and_loads_sorted_files(tm
         (loaded_tracks,) = node.execute(
             directory_path=str(tmp_path),
             transition_type="fade_to_silence",
-            transition_duration=2.5,
+            transition_duration=0.0001,
         )
 
         assert call_order == ["a_song.wav", "B_song.MP3", "c_song.FlAc", "d_song.ogg"]
@@ -75,7 +94,7 @@ def test_audio_mixer_scans_case_insensitive_extensions_and_loads_sorted_files(tm
         assert [track["sample_rate"] for track in loaded_tracks] == [44_100, 44_100, 44_100, 44_100]
         assert all(isinstance(track["waveform"], torch.Tensor) for track in loaded_tracks)
         assert all(track["transition_type"] == "fade_to_silence" for track in loaded_tracks)
-        assert all(track["transition_duration_seconds"] == 2.5 for track in loaded_tracks)
+        assert all(track["transition_duration_seconds"] == 0.0001 for track in loaded_tracks)
     finally:
         _cleanup_fake_torchaudio()
 
@@ -145,3 +164,202 @@ def test_audio_mixer_is_registered_in_package_mappings():
 
     assert package_module.NODE_CLASS_MAPPINGS["CoolAudioMixer"] is package_module.CoolAudioMixer
     assert package_module.NODE_DISPLAY_NAME_MAPPINGS["CoolAudioMixer"] == "Cool Audio Mixer"
+
+
+def test_audio_mixer_crossfade_overlaps_and_applies_linear_fades(tmp_path):
+    (tmp_path / "a_song.wav").write_bytes(b"track-a")
+    (tmp_path / "b_song.wav").write_bytes(b"track-b")
+
+    call_order: list[str] = []
+    track_specs = {
+        "a_song.wav": {
+            "waveform": torch.ones((2, 6), dtype=torch.float32),
+            "sample_rate": 10,
+        },
+        "b_song.wav": {
+            "waveform": torch.full((2, 6), 3.0, dtype=torch.float32),
+            "sample_rate": 10,
+        },
+    }
+    _install_fake_torchaudio(call_order, track_specs=track_specs)
+    try:
+        module = _load_module("cool_effects_audio_mixer_crossfade_test", "nodes/audio_mixer.py")
+        node = module.CoolAudioMixer()
+        (mixed_tracks,) = node.execute(
+            directory_path=str(tmp_path),
+            transition_type="crossfade",
+            transition_duration=0.3,
+        )
+    finally:
+        _cleanup_fake_torchaudio()
+
+    mixed_waveform = mixed_tracks[0]["mixed_waveform"]
+    expected = torch.tensor([1.0, 1.0, 1.0, 1.0, 2.0, 3.0, 3.0, 3.0, 3.0], dtype=torch.float32)
+    assert mixed_waveform.shape == (2, 9)
+    assert torch.allclose(mixed_waveform[0], expected)
+    assert torch.allclose(mixed_waveform[1], expected)
+
+
+def test_audio_mixer_hard_cut_concatenates_without_overlap_or_gap(tmp_path):
+    (tmp_path / "a_song.wav").write_bytes(b"track-a")
+    (tmp_path / "b_song.wav").write_bytes(b"track-b")
+
+    call_order: list[str] = []
+    track_specs = {
+        "a_song.wav": {
+            "waveform": torch.ones((2, 6), dtype=torch.float32),
+            "sample_rate": 10,
+        },
+        "b_song.wav": {
+            "waveform": torch.full((2, 6), 3.0, dtype=torch.float32),
+            "sample_rate": 10,
+        },
+    }
+    _install_fake_torchaudio(call_order, track_specs=track_specs)
+    try:
+        module = _load_module("cool_effects_audio_mixer_hard_cut_mix_test", "nodes/audio_mixer.py")
+        node = module.CoolAudioMixer()
+        (mixed_tracks,) = node.execute(
+            directory_path=str(tmp_path),
+            transition_type="hard_cut",
+            transition_duration=9.0,
+        )
+    finally:
+        _cleanup_fake_torchaudio()
+
+    mixed_waveform = mixed_tracks[0]["mixed_waveform"]
+    expected = torch.tensor(
+        [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0], dtype=torch.float32
+    )
+    assert mixed_waveform.shape == (2, 12)
+    assert torch.allclose(mixed_waveform[0], expected)
+    assert torch.allclose(mixed_waveform[1], expected)
+
+
+def test_audio_mixer_fade_to_silence_adds_silence_gap_between_tracks(tmp_path):
+    (tmp_path / "a_song.wav").write_bytes(b"track-a")
+    (tmp_path / "b_song.wav").write_bytes(b"track-b")
+
+    call_order: list[str] = []
+    track_specs = {
+        "a_song.wav": {
+            "waveform": torch.ones((2, 6), dtype=torch.float32),
+            "sample_rate": 10,
+        },
+        "b_song.wav": {
+            "waveform": torch.full((2, 6), 3.0, dtype=torch.float32),
+            "sample_rate": 10,
+        },
+    }
+    _install_fake_torchaudio(call_order, track_specs=track_specs)
+    try:
+        module = _load_module("cool_effects_audio_mixer_fade_to_silence_test", "nodes/audio_mixer.py")
+        node = module.CoolAudioMixer()
+        (mixed_tracks,) = node.execute(
+            directory_path=str(tmp_path),
+            transition_type="fade_to_silence",
+            transition_duration=0.2,
+        )
+    finally:
+        _cleanup_fake_torchaudio()
+
+    mixed_waveform = mixed_tracks[0]["mixed_waveform"]
+    expected = torch.tensor(
+        [1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 3.0, 3.0, 3.0, 3.0, 3.0],
+        dtype=torch.float32,
+    )
+    assert mixed_waveform.shape == (2, 14)
+    assert torch.allclose(mixed_waveform[0], expected)
+    assert torch.allclose(mixed_waveform[1], expected)
+
+
+def test_audio_mixer_resamples_to_first_track_rate_and_normalizes_to_stereo(tmp_path):
+    (tmp_path / "a_song.wav").write_bytes(b"track-a")
+    (tmp_path / "b_song.wav").write_bytes(b"track-b")
+    (tmp_path / "c_song.wav").write_bytes(b"track-c")
+
+    call_order: list[str] = []
+    resample_calls: list[tuple[int, int]] = []
+    track_specs = {
+        "a_song.wav": {
+            "waveform": torch.tensor([[1.0, 2.0, 3.0, 4.0]], dtype=torch.float32),
+            "sample_rate": 8,
+        },
+        "b_song.wav": {
+            "waveform": torch.tensor(
+                [[10.0, 20.0, 30.0, 40.0], [11.0, 21.0, 31.0, 41.0]], dtype=torch.float32
+            ),
+            "sample_rate": 16,
+        },
+        "c_song.wav": {
+            "waveform": torch.tensor(
+                [
+                    [100.0, 200.0, 300.0, 400.0],
+                    [101.0, 201.0, 301.0, 401.0],
+                    [102.0, 202.0, 302.0, 402.0],
+                ],
+                dtype=torch.float32,
+            ),
+            "sample_rate": 8,
+        },
+    }
+    _install_fake_torchaudio(call_order, track_specs=track_specs, resample_calls=resample_calls)
+    try:
+        module = _load_module("cool_effects_audio_mixer_resample_stereo_test", "nodes/audio_mixer.py")
+        node = module.CoolAudioMixer()
+        (mixed_tracks,) = node.execute(
+            directory_path=str(tmp_path),
+            transition_type="hard_cut",
+            transition_duration=1.0,
+        )
+    finally:
+        _cleanup_fake_torchaudio()
+
+    assert [track["sample_rate"] for track in mixed_tracks] == [8, 8, 8]
+    assert all(track["waveform"].shape[0] == 2 for track in mixed_tracks)
+    assert resample_calls == [(16, 8)]
+    assert torch.equal(
+        mixed_tracks[0]["waveform"],
+        torch.tensor([[1.0, 2.0, 3.0, 4.0], [1.0, 2.0, 3.0, 4.0]], dtype=torch.float32),
+    )
+    assert torch.equal(
+        mixed_tracks[2]["waveform"],
+        torch.tensor(
+            [[100.0, 200.0, 300.0, 400.0], [101.0, 201.0, 301.0, 401.0]],
+            dtype=torch.float32,
+        ),
+    )
+
+
+def test_audio_mixer_crossfade_raises_when_transition_longer_than_adjacent_track(tmp_path):
+    (tmp_path / "a_song.wav").write_bytes(b"track-a")
+    (tmp_path / "b_song.wav").write_bytes(b"track-b")
+
+    call_order: list[str] = []
+    track_specs = {
+        "a_song.wav": {
+            "waveform": torch.ones((2, 3), dtype=torch.float32),
+            "sample_rate": 10,
+        },
+        "b_song.wav": {
+            "waveform": torch.full((2, 2), 3.0, dtype=torch.float32),
+            "sample_rate": 10,
+        },
+    }
+    _install_fake_torchaudio(call_order, track_specs=track_specs)
+    try:
+        module = _load_module("cool_effects_audio_mixer_crossfade_duration_validation_test", "nodes/audio_mixer.py")
+        node = module.CoolAudioMixer()
+        try:
+            node.execute(
+                directory_path=str(tmp_path),
+                transition_type="crossfade",
+                transition_duration=0.3,
+            )
+            raise AssertionError("Expected ValueError for transition_duration longer than shortest track")
+        except ValueError as error:
+            message = str(error)
+    finally:
+        _cleanup_fake_torchaudio()
+
+    assert "transition_duration is longer than the shortest adjacent track" in message

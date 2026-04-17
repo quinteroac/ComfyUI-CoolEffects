@@ -19,3 +19,13 @@
 **Pitfalls Encountered:** Existing tests invoked `execute()` with only `directory_path`; keeping defaulted execute parameters prevented breaking earlier story behavior while adding new required node inputs for ComfyUI.
 
 **Useful Context for Future Agents:** Tests for transition inputs and hard-cut duration behavior are in `tests/test_audio_mixer_node.py`; `transition_duration_seconds` in returned track metadata is the normalized value (`0.0` for `hard_cut`).
+
+## US-003 — Mix tracks with the selected transition
+
+**Summary:** Implemented transition-aware track mixing in `CoolAudioMixer` for `crossfade`, `hard_cut`, and `fade_to_silence`, including linear fade envelopes and sequential pairwise concatenation into a mixed waveform.
+
+**Key Decisions:** Added `_prepare_tracks_for_mixing()` to normalize every loaded track to stereo and resample to the first track’s sample rate before any transition is applied; kept node output contract as `AUDIO_TRACKS` for this iteration while exposing `mixed_waveform` and `mixed_sample_rate` on the first returned track for downstream incremental stories.
+
+**Pitfalls Encountered:** Existing scan/load tests used tiny fake waveforms with very high fake sample rate, which made non-hard-cut transition durations exceed available samples and trigger new validation logic unexpectedly.
+
+**Useful Context for Future Agents:** Transition behavior and normalization are now covered in `tests/test_audio_mixer_node.py` with explicit waveform assertions for crossfade/hard-cut/fade-to-silence, resampling call assertions, stereo normalization checks, and crossfade-duration validation when overlap exceeds adjacent track length.
