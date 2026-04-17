@@ -17,7 +17,8 @@ void main() {
         ? normalize(to_center)
         : vec2(1.0, 0.0);
 
-    float clamped_strength = clamp(u_strength, 0.0, 0.1);
+    float pulse = 1.0 + 0.5 * sin(u_time * 2.3);
+    float clamped_strength = clamp(u_strength, 0.0, 0.1) * pulse;
     float radial_falloff = clamp(distance_from_center * 1.41421356, 0.0, 1.0);
     float radial_mode = step(0.5, u_radial);
 

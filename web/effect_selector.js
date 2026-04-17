@@ -529,7 +529,8 @@ export async function create_live_glsl_preview({
             if (
                 uniform_name === "u_image" ||
                 !uniform_value ||
-                typeof uniform_value !== "object"
+                typeof uniform_value !== "object" ||
+                Array.isArray(uniform_value)
             ) {
                 continue;
             }

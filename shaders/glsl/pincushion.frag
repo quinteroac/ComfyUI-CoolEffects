@@ -15,7 +15,7 @@ void main() {
     float radius = length(centered_uv);
     float theta = atan(centered_uv.y, centered_uv.x);
 
-    float strength = clamp(u_strength, 0.0, 1.0);
+    float strength = clamp(u_strength, 0.0, 1.0) * (1.0 + 0.18 * sin(u_time * 1.4));
     float zoom = max(u_zoom, 0.001);
     float inverse_barrel = max(1.0 - strength * radius * radius, 0.0);
     float sample_radius = (radius * inverse_barrel) / zoom;

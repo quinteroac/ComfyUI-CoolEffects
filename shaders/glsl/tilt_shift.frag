@@ -28,7 +28,7 @@ void main() {
     vec2 uv = gl_FragCoord.xy / u_resolution;
     vec3 source_color = texture(u_image, clamp_uv(uv)).rgb;
 
-    float focus_center = mix(-0.5, 0.5, clamp(u_focus_center, 0.0, 1.0));
+    float focus_center = mix(-0.5, 0.5, clamp(u_focus_center, 0.0, 1.0)) + 0.07 * sin(u_time * 0.5);
     float focus_half_width = max(clamp(u_focus_width, 0.0, 1.0) * 0.5, 0.0001);
     float blur_strength = clamp(u_blur_strength, 0.0, 1.0);
     float angle_radians = radians(clamp(u_angle, 0.0, 360.0));
