@@ -133,6 +133,11 @@ const EFFECT_DEFAULT_UNIFORMS = Object.freeze({
         u_brightness: 0.0,
         u_contrast: 0.0,
     }),
+    hsl: Object.freeze({
+        u_hue_shift: 0.0,
+        u_saturation: 0.0,
+        u_lightness: 0.0,
+    }),
     waveform: Object.freeze({
         u_line_thickness: 0.005,
         u_waveform_height: 0.2,

@@ -99,6 +99,11 @@ DEFAULT_PARAMS: dict[str, dict] = {
         "u_brightness": 0.0,
         "u_contrast": 0.0,
     },
+    "hsl": {
+        "u_hue_shift": 0.0,
+        "u_saturation": 0.0,
+        "u_lightness": 0.0,
+    },
     "pan_left": {
         "u_speed": 0.1,
         "u_origin_x": 0.0,
