@@ -19,3 +19,13 @@
 **Pitfalls Encountered:** The environment still lacks `pytest`, so full Python test execution is not currently runnable here; validation had to rely on JS tests and Python syntax checks.
 
 **Useful Context for Future Agents:** For color-space effects, keep identity defaults in both `nodes/effect_params.py` and `web/effect_node_widget.js` so preview and backend stay aligned, and assert those default identity values directly in node tests to cover “no visible change” acceptance criteria even when visual/manual validation is external.
+
+## US-003 — Color Temperature Effect Node
+
+**Summary:** Added `CoolColorTemperatureEffect` with `temperature` and `tint` FLOAT controls, `EFFECT_PARAMS` output, GLSL shader implementation (`color_temperature.frag`), live WebGL2 preview integration (`web/color_temperature_effect.js`), package registration, and Python/JS tests covering contract, registration, identity defaults, hardened widget uniform handling, and video-generator pipeline wiring.
+
+**Key Decisions:** Followed the existing per-effect architecture using effect key `color_temperature`; mapped controls to uniforms `u_temperature` and `u_tint`; implemented shader bias vectors so positive temperature warms (red/yellow) and negative cools (blue), while tint applies a green↔magenta shift and `(0, 0)` remains an exact identity path.
+
+**Pitfalls Encountered:** `pytest` is still unavailable in this runtime, so Python test execution could not run end-to-end; verification relied on JS test execution and Python compilation checks.
+
+**Useful Context for Future Agents:** For any new effect, keep defaults synchronized across `nodes/effect_params.py`, `web/effect_node_widget.js`, and per-effect param specs, otherwise preview defaults and backend rendering can diverge subtly even when node inputs are unchanged.

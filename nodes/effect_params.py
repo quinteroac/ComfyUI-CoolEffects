@@ -104,6 +104,10 @@ DEFAULT_PARAMS: dict[str, dict] = {
         "u_saturation": 0.0,
         "u_lightness": 0.0,
     },
+    "color_temperature": {
+        "u_temperature": 0.0,
+        "u_tint": 0.0,
+    },
     "pan_left": {
         "u_speed": 0.1,
         "u_origin_x": 0.0,

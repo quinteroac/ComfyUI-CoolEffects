@@ -142,6 +142,12 @@ _hsl_effect_module = _load_module_from_path(
 )
 CoolHSLEffect = _hsl_effect_module.CoolHSLEffect
 
+_color_temperature_effect_module = _load_module_from_path(
+    "cool_effects_color_temperature_effect_runtime",
+    PACKAGE_ROOT / "nodes" / "color_temperature_effect.py",
+)
+CoolColorTemperatureEffect = _color_temperature_effect_module.CoolColorTemperatureEffect
+
 _waveform_effect_module = _load_module_from_path(
     "cool_effects_waveform_effect_runtime",
     PACKAGE_ROOT / "nodes" / "waveform_effect.py",
@@ -224,6 +230,7 @@ NODE_CLASS_MAPPINGS = {
     "CoolChromaticAberrationEffect": CoolChromaticAberrationEffect,
     "CoolBrightnessContrastEffect": CoolBrightnessContrastEffect,
     "CoolHSLEffect": CoolHSLEffect,
+    "CoolColorTemperatureEffect": CoolColorTemperatureEffect,
     "CoolWaveformEffect": CoolWaveformEffect,
     "CoolTextOverlayEffect": CoolTextOverlayEffect,
     "CoolPanLeftEffect": CoolPanLeftEffect,
@@ -254,6 +261,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CoolChromaticAberrationEffect": "Cool Chromatic Aberration Effect",
     "CoolBrightnessContrastEffect": "Cool Brightness / Contrast Effect",
     "CoolHSLEffect": "Cool HSL Effect",
+    "CoolColorTemperatureEffect": "Cool Color Temperature Effect",
     "CoolWaveformEffect": "Cool Waveform Effect",
     "CoolTextOverlayEffect": "Cool Text Overlay Effect",
     "CoolPanLeftEffect": "Cool Pan Left Effect",
