@@ -1,0 +1,155 @@
+{
+  "goals": [
+    "Allow users to combine multiple audio tracks directly in ComfyUI without external tools.",
+    "Support three transition modes (Crossfade, Hard Cut, Fade to Silence) to control how tracks flow into each other.",
+    "Output a standard ComfyUI AUDIO object that connects to any node expecting AUDIO input."
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Load audio tracks from a directory",
+      "description": "As a ComfyUI creator, I want to point the node at a directory path and have it automatically load all audio files found there so that I don't need to wire individual files one by one.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "Node has a `directory_path` STRING input (text field)."
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "Node scans the directory for audio files with extensions `.wav`, `.mp3`, `.flac`, `.ogg` (case-insensitive)."
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "Files are loaded and sorted alphabetically by filename."
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "If the directory contains fewer than 2 audio files, the node raises a `ValueError` with a clear message."
+        },
+        {
+          "id": "US-001-AC05",
+          "text": "If the directory does not exist, the node raises a `ValueError` with a clear message."
+        },
+        {
+          "id": "US-001-AC06",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Select transition effect and configure its duration",
+      "description": "As a ComfyUI creator, I want to choose a transition type and set its duration so that I can control how tracks blend together.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "Node has a `transition_type` COMBO input with options: `[\"crossfade\", \"hard_cut\", \"fade_to_silence\"]`."
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "Node has a `transition_duration` FLOAT input (range 0.1–10.0 s, default 1.0 s, step 0.1)."
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "`transition_duration` is ignored (has no effect) when `transition_type` is `hard_cut`."
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "Mix tracks with the selected transition",
+      "description": "As a ComfyUI creator, I want the node to concatenate all loaded tracks applying the chosen transition between each pair so that the output audio sounds like a smooth mix rather than isolated segments.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "**Crossfade:** the last `transition_duration` seconds of track N overlap with the first `transition_duration` seconds of track N+1; volume of track N fades linearly to 0 while volume of track N+1 fades linearly from 0."
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "**Hard Cut:** track N+1 starts immediately after the last sample of track N with no gap and no overlap."
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "**Fade to Silence:** track N fades out to silence over `transition_duration` seconds, then track N+1 fades in from silence over `transition_duration` seconds (gap of silence between tracks)."
+        },
+        {
+          "id": "US-003-AC04",
+          "text": "Tracks with different sample rates are resampled to the sample rate of the first loaded track before mixing."
+        },
+        {
+          "id": "US-003-AC05",
+          "text": "Tracks with different channel counts are normalised to stereo (2 channels) before mixing."
+        },
+        {
+          "id": "US-003-AC06",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "Output mixed AUDIO",
+      "description": "As a ComfyUI creator, I want the node to output a standard AUDIO object so that I can connect it directly to `CoolVideoGenerator` or any other AUDIO-consuming node.",
+      "acceptanceCriteria": [
+        {
+          "id": "US-004-AC01",
+          "text": "Node output type is `AUDIO` (ComfyUI standard: `{\"waveform\": Tensor[1, channels, samples], \"sample_rate\": int}`)."
+        },
+        {
+          "id": "US-004-AC02",
+          "text": "The mixed audio can be connected to `CoolVideoGenerator`'s AUDIO input and the generated video plays the mixed audio correctly."
+        },
+        {
+          "id": "US-004-AC03",
+          "text": "Visually verified in ComfyUI: node executes without error, output connects to `CoolVideoGenerator`, video has mixed audio."
+        },
+        {
+          "id": "US-004-AC04",
+          "text": "Typecheck / lint passes."
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "Node class name is `CoolAudioMixer`; registered as `\"CoolAudioMixer\"` in `NODE_CLASS_MAPPINGS`."
+    },
+    {
+      "id": "FR-2",
+      "description": "Node display name is `\"Cool Audio Mixer\"`."
+    },
+    {
+      "id": "FR-3",
+      "description": "Node category is `\"CoolEffects/audio\"`."
+    },
+    {
+      "id": "FR-4",
+      "description": "Node file is `nodes/audio_mixer.py`; JS extension (if any) is `web/audio_mixer.js`."
+    },
+    {
+      "id": "FR-5",
+      "description": "Audio file loading uses `torchaudio.load()` (add `torchaudio` to `requirements.txt` if not already present; check first)."
+    },
+    {
+      "id": "FR-6",
+      "description": "Resampling uses `torchaudio.functional.resample()`."
+    },
+    {
+      "id": "FR-7",
+      "description": "All waveform tensors are normalised to shape `[channels, samples]` (2D) before mixing; final output is wrapped as `[1, channels, samples]` (3D) per ComfyUI AUDIO convention."
+    },
+    {
+      "id": "FR-8",
+      "description": "Crossfade overlap must not exceed the duration of the shorter of the two adjacent tracks; raise `ValueError` if `transition_duration` is longer than the shortest track."
+    },
+    {
+      "id": "FR-9",
+      "description": "Node is registered in `__init__.py` following the existing `importlib.util.spec_from_file_location` pattern."
+    }
+  ]
+}
