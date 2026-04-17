@@ -29,3 +29,13 @@
 **Pitfalls Encountered:** Existing scan/load tests used tiny fake waveforms with very high fake sample rate, which made non-hard-cut transition durations exceed available samples and trigger new validation logic unexpectedly.
 
 **Useful Context for Future Agents:** Transition behavior and normalization are now covered in `tests/test_audio_mixer_node.py` with explicit waveform assertions for crossfade/hard-cut/fade-to-silence, resampling call assertions, stereo normalization checks, and crossfade-duration validation when overlap exceeds adjacent track length.
+
+## US-004 — Output mixed AUDIO
+
+**Summary:** Updated `CoolAudioMixer` to emit standard ComfyUI `AUDIO` output (`{"waveform": Tensor[1, channels, samples], "sample_rate": int}`) and validated compatibility with `CoolVideoGenerator`.
+
+**Key Decisions:** Changed `RETURN_TYPES`/`RETURN_NAMES` to `("AUDIO",)`/`("audio",)` and wrapped the mixed stereo tensor as batch-first `[1, 2, samples]` directly in `execute()` so downstream nodes receive canonical ComfyUI audio shape.
+
+**Pitfalls Encountered:** A hard-cut regression test initially compared two runs with dynamic fake loader outputs, which produced different waveforms for unrelated reasons; using deterministic `track_specs` fixed the assertion to measure transition behavior only.
+
+**Useful Context for Future Agents:** `tests/test_audio_mixer_node.py` now asserts the AUDIO contract, transition mixing behavior on `mixed_audio["waveform"][0]`, and includes an integration-style test that pipes mixer output into `CoolVideoGenerator` under fake `comfy_api` to confirm audio passthrough.

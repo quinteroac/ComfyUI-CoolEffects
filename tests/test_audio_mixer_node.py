@@ -1,4 +1,5 @@
 from pathlib import Path
+from dataclasses import dataclass
 import importlib.util
 import sys
 import types
@@ -56,6 +57,47 @@ def _cleanup_fake_torchaudio() -> None:
     sys.modules.pop("torchaudio", None)
 
 
+@dataclass
+class _FakeVideo:
+    images: torch.Tensor
+    audio: object
+    frame_rate: object
+
+
+def _install_fake_comfy_api() -> None:
+    comfy_api_module = types.ModuleType("comfy_api")
+    latest_module = types.ModuleType("comfy_api.latest")
+
+    class _FakeInputImpl:
+        @staticmethod
+        def VideoFromComponents(video_components):
+            return _FakeVideo(
+                images=video_components.images,
+                audio=video_components.audio,
+                frame_rate=video_components.frame_rate,
+            )
+
+    @dataclass
+    class _FakeVideoComponents:
+        images: torch.Tensor
+        audio: object
+        frame_rate: object
+
+    class _FakeTypes:
+        VideoComponents = _FakeVideoComponents
+
+    latest_module.InputImpl = _FakeInputImpl
+    latest_module.Types = _FakeTypes
+    comfy_api_module.latest = latest_module
+    sys.modules["comfy_api"] = comfy_api_module
+    sys.modules["comfy_api.latest"] = latest_module
+
+
+def _cleanup_fake_comfy_api() -> None:
+    sys.modules.pop("comfy_api.latest", None)
+    sys.modules.pop("comfy_api", None)
+
+
 def test_audio_mixer_node_has_transition_inputs():
     module = _load_module("cool_effects_audio_mixer_inputs_test", "nodes/audio_mixer.py")
     required_inputs = module.CoolAudioMixer.INPUT_TYPES()["required"]
@@ -69,6 +111,8 @@ def test_audio_mixer_node_has_transition_inputs():
         "FLOAT",
         {"default": 1.0, "min": 0.1, "max": 10.0, "step": 0.1},
     )
+    assert module.CoolAudioMixer.RETURN_TYPES == ("AUDIO",)
+    assert module.CoolAudioMixer.RETURN_NAMES == ("audio",)
 
 
 def test_audio_mixer_scans_case_insensitive_extensions_and_loads_sorted_files(tmp_path):
@@ -83,18 +127,17 @@ def test_audio_mixer_scans_case_insensitive_extensions_and_loads_sorted_files(tm
     try:
         module = _load_module("cool_effects_audio_mixer_scan_test", "nodes/audio_mixer.py")
         node = module.CoolAudioMixer()
-        (loaded_tracks,) = node.execute(
+        (mixed_audio,) = node.execute(
             directory_path=str(tmp_path),
             transition_type="fade_to_silence",
             transition_duration=0.0001,
         )
 
         assert call_order == ["a_song.wav", "B_song.MP3", "c_song.FlAc", "d_song.ogg"]
-        assert [track["filename"] for track in loaded_tracks] == call_order
-        assert [track["sample_rate"] for track in loaded_tracks] == [44_100, 44_100, 44_100, 44_100]
-        assert all(isinstance(track["waveform"], torch.Tensor) for track in loaded_tracks)
-        assert all(track["transition_type"] == "fade_to_silence" for track in loaded_tracks)
-        assert all(track["transition_duration_seconds"] == 0.0001 for track in loaded_tracks)
+        assert isinstance(mixed_audio["waveform"], torch.Tensor)
+        assert mixed_audio["waveform"].shape[0] == 1
+        assert mixed_audio["waveform"].shape[1] == 2
+        assert mixed_audio["sample_rate"] == 44_100
     finally:
         _cleanup_fake_torchaudio()
 
@@ -135,16 +178,26 @@ def test_audio_mixer_ignores_transition_duration_for_hard_cut(tmp_path):
     (tmp_path / "b_song.wav").write_bytes(b"track-b")
 
     call_order: list[str] = []
-    _install_fake_torchaudio(call_order)
+    track_specs = {
+        "a_song.wav": {
+            "waveform": torch.ones((2, 8), dtype=torch.float32),
+            "sample_rate": 44_100,
+        },
+        "b_song.wav": {
+            "waveform": torch.full((2, 8), 2.0, dtype=torch.float32),
+            "sample_rate": 44_100,
+        },
+    }
+    _install_fake_torchaudio(call_order, track_specs=track_specs)
     try:
         module = _load_module("cool_effects_audio_mixer_hard_cut_test", "nodes/audio_mixer.py")
         node = module.CoolAudioMixer()
-        (short_duration_tracks,) = node.execute(
+        (short_duration_audio,) = node.execute(
             directory_path=str(tmp_path),
             transition_type="hard_cut",
             transition_duration=0.1,
         )
-        (long_duration_tracks,) = node.execute(
+        (long_duration_audio,) = node.execute(
             directory_path=str(tmp_path),
             transition_type="hard_cut",
             transition_duration=9.5,
@@ -152,11 +205,8 @@ def test_audio_mixer_ignores_transition_duration_for_hard_cut(tmp_path):
     finally:
         _cleanup_fake_torchaudio()
 
-    assert [track["filename"] for track in short_duration_tracks] == [track["filename"] for track in long_duration_tracks]
-    assert all(track["transition_type"] == "hard_cut" for track in short_duration_tracks)
-    assert all(track["transition_type"] == "hard_cut" for track in long_duration_tracks)
-    assert all(track["transition_duration_seconds"] == 0.0 for track in short_duration_tracks)
-    assert all(track["transition_duration_seconds"] == 0.0 for track in long_duration_tracks)
+    assert short_duration_audio["sample_rate"] == long_duration_audio["sample_rate"]
+    assert torch.equal(short_duration_audio["waveform"], long_duration_audio["waveform"])
 
 
 def test_audio_mixer_is_registered_in_package_mappings():
@@ -185,7 +235,7 @@ def test_audio_mixer_crossfade_overlaps_and_applies_linear_fades(tmp_path):
     try:
         module = _load_module("cool_effects_audio_mixer_crossfade_test", "nodes/audio_mixer.py")
         node = module.CoolAudioMixer()
-        (mixed_tracks,) = node.execute(
+        (mixed_audio,) = node.execute(
             directory_path=str(tmp_path),
             transition_type="crossfade",
             transition_duration=0.3,
@@ -193,7 +243,7 @@ def test_audio_mixer_crossfade_overlaps_and_applies_linear_fades(tmp_path):
     finally:
         _cleanup_fake_torchaudio()
 
-    mixed_waveform = mixed_tracks[0]["mixed_waveform"]
+    mixed_waveform = mixed_audio["waveform"][0]
     expected = torch.tensor([1.0, 1.0, 1.0, 1.0, 2.0, 3.0, 3.0, 3.0, 3.0], dtype=torch.float32)
     assert mixed_waveform.shape == (2, 9)
     assert torch.allclose(mixed_waveform[0], expected)
@@ -219,7 +269,7 @@ def test_audio_mixer_hard_cut_concatenates_without_overlap_or_gap(tmp_path):
     try:
         module = _load_module("cool_effects_audio_mixer_hard_cut_mix_test", "nodes/audio_mixer.py")
         node = module.CoolAudioMixer()
-        (mixed_tracks,) = node.execute(
+        (mixed_audio,) = node.execute(
             directory_path=str(tmp_path),
             transition_type="hard_cut",
             transition_duration=9.0,
@@ -227,7 +277,7 @@ def test_audio_mixer_hard_cut_concatenates_without_overlap_or_gap(tmp_path):
     finally:
         _cleanup_fake_torchaudio()
 
-    mixed_waveform = mixed_tracks[0]["mixed_waveform"]
+    mixed_waveform = mixed_audio["waveform"][0]
     expected = torch.tensor(
         [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0], dtype=torch.float32
     )
@@ -255,7 +305,7 @@ def test_audio_mixer_fade_to_silence_adds_silence_gap_between_tracks(tmp_path):
     try:
         module = _load_module("cool_effects_audio_mixer_fade_to_silence_test", "nodes/audio_mixer.py")
         node = module.CoolAudioMixer()
-        (mixed_tracks,) = node.execute(
+        (mixed_audio,) = node.execute(
             directory_path=str(tmp_path),
             transition_type="fade_to_silence",
             transition_duration=0.2,
@@ -263,7 +313,7 @@ def test_audio_mixer_fade_to_silence_adds_silence_gap_between_tracks(tmp_path):
     finally:
         _cleanup_fake_torchaudio()
 
-    mixed_waveform = mixed_tracks[0]["mixed_waveform"]
+    mixed_waveform = mixed_audio["waveform"][0]
     expected = torch.tensor(
         [1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 3.0, 3.0, 3.0, 3.0, 3.0],
         dtype=torch.float32,
@@ -307,7 +357,7 @@ def test_audio_mixer_resamples_to_first_track_rate_and_normalizes_to_stereo(tmp_
     try:
         module = _load_module("cool_effects_audio_mixer_resample_stereo_test", "nodes/audio_mixer.py")
         node = module.CoolAudioMixer()
-        (mixed_tracks,) = node.execute(
+        (mixed_audio,) = node.execute(
             directory_path=str(tmp_path),
             transition_type="hard_cut",
             transition_duration=1.0,
@@ -315,17 +365,17 @@ def test_audio_mixer_resamples_to_first_track_rate_and_normalizes_to_stereo(tmp_
     finally:
         _cleanup_fake_torchaudio()
 
-    assert [track["sample_rate"] for track in mixed_tracks] == [8, 8, 8]
-    assert all(track["waveform"].shape[0] == 2 for track in mixed_tracks)
+    mixed_waveform = mixed_audio["waveform"][0]
+    assert mixed_audio["sample_rate"] == 8
+    assert mixed_waveform.shape == (2, 10)
     assert resample_calls == [(16, 8)]
     assert torch.equal(
-        mixed_tracks[0]["waveform"],
-        torch.tensor([[1.0, 2.0, 3.0, 4.0], [1.0, 2.0, 3.0, 4.0]], dtype=torch.float32),
-    )
-    assert torch.equal(
-        mixed_tracks[2]["waveform"],
+        mixed_waveform,
         torch.tensor(
-            [[100.0, 200.0, 300.0, 400.0], [101.0, 201.0, 301.0, 401.0]],
+            [
+                [1.0, 2.0, 3.0, 4.0, 10.0, 40.0, 100.0, 200.0, 300.0, 400.0],
+                [1.0, 2.0, 3.0, 4.0, 11.0, 41.0, 101.0, 201.0, 301.0, 401.0],
+            ],
             dtype=torch.float32,
         ),
     )
@@ -363,3 +413,50 @@ def test_audio_mixer_crossfade_raises_when_transition_longer_than_adjacent_track
         _cleanup_fake_torchaudio()
 
     assert "transition_duration is longer than the shortest adjacent track" in message
+
+
+def test_audio_mixer_output_connects_to_video_generator_audio_input(tmp_path):
+    (tmp_path / "a_song.wav").write_bytes(b"track-a")
+    (tmp_path / "b_song.wav").write_bytes(b"track-b")
+
+    call_order: list[str] = []
+    _install_fake_torchaudio(call_order)
+    _install_fake_comfy_api()
+    try:
+        mixer_module = _load_module("cool_effects_audio_mixer_to_video_generator_test", "nodes/audio_mixer.py")
+        video_generator_module = _load_module(
+            "cool_effects_video_generator_audio_contract_test",
+            "nodes/video_generator.py",
+        )
+        video_generator_module.extract_audio_features = lambda audio, fps, duration: []
+        video_generator_module._render_frames = (
+            lambda image, effect_params, fps, duration, audio_features=None: image
+        )
+
+        mixer_node = mixer_module.CoolAudioMixer()
+        (mixed_audio,) = mixer_node.execute(
+            directory_path=str(tmp_path),
+            transition_type="hard_cut",
+            transition_duration=0.1,
+        )
+
+        generator_node = video_generator_module.CoolVideoGenerator()
+        output = generator_node.execute(
+            image=torch.zeros((1, 4, 4, 3), dtype=torch.float32),
+            fps=24,
+            duration=1.0,
+            effect_count=1,
+            audio=mixed_audio,
+            effect_params_1={"effect_name": "glitch", "params": {}},
+        )
+
+        result_video = output["result"][0]
+        assert isinstance(result_video, _FakeVideo)
+        assert result_video.audio is mixed_audio
+        assert mixed_audio["waveform"].ndim == 3
+        assert mixed_audio["waveform"].shape[0] == 1
+        assert mixed_audio["waveform"].shape[1] == 2
+        assert isinstance(mixed_audio["sample_rate"], int)
+    finally:
+        _cleanup_fake_comfy_api()
+        _cleanup_fake_torchaudio()

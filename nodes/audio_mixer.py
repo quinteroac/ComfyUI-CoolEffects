@@ -229,8 +229,8 @@ class CoolAudioMixer:
             }
         }
 
-    RETURN_TYPES = ("AUDIO_TRACKS",)
-    RETURN_NAMES = ("audio_tracks",)
+    RETURN_TYPES = ("AUDIO",)
+    RETURN_NAMES = ("audio",)
     FUNCTION = "execute"
     CATEGORY = "CoolEffects/audio"
 
@@ -247,9 +247,8 @@ class CoolAudioMixer:
             effective_transition_duration,
             target_sample_rate,
         )
-        for track in prepared_tracks:
-            track["transition_type"] = transition_type
-            track["transition_duration_seconds"] = effective_transition_duration
-        prepared_tracks[0]["mixed_waveform"] = mixed_waveform
-        prepared_tracks[0]["mixed_sample_rate"] = target_sample_rate
-        return (prepared_tracks,)
+        mixed_audio = {
+            "waveform": mixed_waveform.unsqueeze(0),
+            "sample_rate": target_sample_rate,
+        }
+        return (mixed_audio,)
