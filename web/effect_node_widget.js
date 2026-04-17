@@ -142,6 +142,11 @@ const EFFECT_DEFAULT_UNIFORMS = Object.freeze({
         u_temperature: 0.0,
         u_tint: 0.0,
     }),
+    curves: Object.freeze({
+        u_lift: 0.0,
+        u_gamma: 1.0,
+        u_gain: 1.0,
+    }),
     waveform: Object.freeze({
         u_line_thickness: 0.005,
         u_waveform_height: 0.2,

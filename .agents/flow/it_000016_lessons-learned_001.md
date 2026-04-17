@@ -29,3 +29,13 @@
 **Pitfalls Encountered:** `pytest` is still unavailable in this runtime, so Python test execution could not run end-to-end; verification relied on JS test execution and Python compilation checks.
 
 **Useful Context for Future Agents:** For any new effect, keep defaults synchronized across `nodes/effect_params.py`, `web/effect_node_widget.js`, and per-effect param specs, otherwise preview defaults and backend rendering can diverge subtly even when node inputs are unchanged.
+
+## US-004 — Curves (RGB Lift / Gamma / Gain) Effect Node
+
+**Summary:** Added `CoolCurvesEffect` with `lift`, `gamma`, and `gain` FLOAT controls, `EFFECT_PARAMS` output, GLSL shader implementation (`curves.frag`), live WebGL2 preview integration (`web/curves_effect.js`), package registration, synchronized backend/frontend defaults, and Python/JS tests for contract, registration, widget uniform sync, identity defaults, and video-generator pipeline wiring.
+
+**Key Decisions:** Reused the established per-effect architecture with effect key `curves`; mapped controls to uniforms `u_lift`, `u_gamma`, and `u_gain`; implemented shader math as additive lift, gamma power transform, and multiplicative gain with clamped input ranges so defaults `(0, 1, 1)` are an identity path.
+
+**Pitfalls Encountered:** As with prior stories, `pytest` is unavailable in this environment, so Python test execution cannot be run end-to-end here; validation must combine JS tests plus Python syntax checks.
+
+**Useful Context for Future Agents:** For lift/gamma/gain style controls, keep default identities aligned in three places (`nodes/effect_params.py`, `web/effect_node_widget.js`, and per-effect JS param specs) so both WebGL preview initialization and video-render defaults remain behaviorally consistent.

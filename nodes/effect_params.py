@@ -108,6 +108,11 @@ DEFAULT_PARAMS: dict[str, dict] = {
         "u_temperature": 0.0,
         "u_tint": 0.0,
     },
+    "curves": {
+        "u_lift": 0.0,
+        "u_gamma": 1.0,
+        "u_gain": 1.0,
+    },
     "pan_left": {
         "u_speed": 0.1,
         "u_origin_x": 0.0,
