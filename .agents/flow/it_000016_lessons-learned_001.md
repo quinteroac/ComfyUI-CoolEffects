@@ -49,3 +49,13 @@
 **Pitfalls Encountered:** The environment still does not provide a `python` executable (only `python3`), and full pytest remains blocked by missing runtime deps in this environment, so validation needs `python3`-based checks plus JS test execution.
 
 **Useful Context for Future Agents:** For multi-control color effects, keep param/default parity in all three locations (`nodes/effect_params.py`, `web/effect_node_widget.js`, and per-effect `*_PARAM_SPECS`) and assert identity behavior in both node output tests and shader-string contract tests to catch backend/frontend drift early.
+
+## US-006 — Sepia / Black & White / Duotone Effect Node
+
+**Summary:** Added `CoolToneMappingEffect` with `mode` (`none`/`bw`/`sepia`/`duotone`), `intensity`, and duotone shadow/highlight RGB controls; wired full backend/frontend support with new shader (`tone_mapping.frag`), package registration, synchronized default uniforms, live WebGL2 widget extension (`web/tone_mapping_effect.js`), and Python/JS tests for contract, registration, mode mapping, identity behavior, and video-generator pipeline integration.
+
+**Key Decisions:** Implemented tone mapping as effect key `tone_mapping` with numeric `u_mode` values (0..3) so backend and WebGL preview share one uniform contract; built shader behavior as `target_color` selection by mode plus `mix(source, target, intensity)` to guarantee mode `none` is an identity path; added explicit mode-string normalization (`trim().toLowerCase()`) in frontend mapping for resilient widget updates.
+
+**Pitfalls Encountered:** Python `pytest` is still unavailable in this environment (`No module named pytest`), so automated Python test execution could not run here; validation relied on JS tests plus Python compile/smoke checks.
+
+**Useful Context for Future Agents:** For effects with COMBO/string controls, keep the node’s string input and convert to numeric uniforms in both Python (`execute`) and JS (`map_*_to_uniform_value`) so preview updates remain real-time and backend/video rendering stays deterministic; also keep identity defaults aligned in `nodes/effect_params.py`, `web/effect_node_widget.js`, and effect param specs to avoid preview/render drift.

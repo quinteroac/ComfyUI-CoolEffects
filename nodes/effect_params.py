@@ -124,6 +124,16 @@ DEFAULT_PARAMS: dict[str, dict] = {
         "u_gamma": 1.0,
         "u_gain": 1.0,
     },
+    "tone_mapping": {
+        "u_mode": 0.0,
+        "u_intensity": 1.0,
+        "u_shadow_r": 0.0,
+        "u_shadow_g": 0.0,
+        "u_shadow_b": 0.0,
+        "u_highlight_r": 1.0,
+        "u_highlight_g": 1.0,
+        "u_highlight_b": 1.0,
+    },
     "pan_left": {
         "u_speed": 0.1,
         "u_origin_x": 0.0,

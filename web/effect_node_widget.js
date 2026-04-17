@@ -158,6 +158,16 @@ const EFFECT_DEFAULT_UNIFORMS = Object.freeze({
         u_gamma: 1.0,
         u_gain: 1.0,
     }),
+    tone_mapping: Object.freeze({
+        u_mode: 0.0,
+        u_intensity: 1.0,
+        u_shadow_r: 0.0,
+        u_shadow_g: 0.0,
+        u_shadow_b: 0.0,
+        u_highlight_r: 1.0,
+        u_highlight_g: 1.0,
+        u_highlight_b: 1.0,
+    }),
     waveform: Object.freeze({
         u_line_thickness: 0.005,
         u_waveform_height: 0.2,
