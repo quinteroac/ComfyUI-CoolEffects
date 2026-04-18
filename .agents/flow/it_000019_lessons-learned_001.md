@@ -19,3 +19,13 @@
 **Pitfalls Encountered:** `CoolVideoMixer` does not yet execute clip blending, so effective transition duration is currently validated/resolved as an explicit contract step rather than applied to rendered output; tests therefore assert the helper behavior directly.
 
 **Useful Context for Future Agents:** For future clip-composition stories, reuse `_resolve_effective_transition_duration()` in `nodes/video_mixer.py` as the single source of truth for transition duration semantics, and keep the transition widget schema aligned with `tests/test_video_mixer_node.py`.
+
+## US-003 — Mix tracks with the selected transition
+
+**Summary:** Implemented full `CoolVideoMixer` clip composition: decoded clips into frame tensors, enforced homogeneous resolution/fps, applied `crossfade`/`hard_cut`/`fade_to_black` visual transitions, mixed audio in parallel using transition analogs, synthesized silence for clips without audio, and returned a mixed `VIDEO`.
+
+**Key Decisions:** Mirrored the `CoolAudioMixer` transition math for audio to keep semantics consistent (`fade_to_black` → `fade_to_silence`), added explicit helper boundaries (`_validate_homogeneous`, `_mix_video_tracks`, `_prepare_audio_tracks_for_mixing`, `_mix_audio_tracks`) to keep validation and transition logic testable, and used frame-derived clip duration for transition-window validation.
+
+**Pitfalls Encountered:** Previous tests asserted `STRING` output from `CoolVideoMixer`; those had to be reworked around internal helpers and a fake `comfy_api.latest` shim once the node began producing `VIDEO` output.
+
+**Useful Context for Future Agents:** `nodes/video_mixer.py` now contains both visual and audio transition implementations with matching shapes; if later stories add preview metadata/UI payloads, keep `result` output compatible with current `VIDEO` construction and preserve the non-`hard_cut` adjacent-duration guard for both frame and audio overlap assumptions.
