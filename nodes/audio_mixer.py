@@ -36,6 +36,47 @@ def _resolve_audio_file_paths(directory_path: str) -> list[Path]:
     return audio_paths
 
 
+def _torchaudio_load(torchaudio, path: str):
+    """Load audio trying multiple backends to avoid torchcodec issues."""
+    import torch
+
+    errors: list[str] = []
+
+    # 1. Try torchaudio with explicit backends
+    for backend in ("soundfile", "ffmpeg", None):
+        try:
+            if backend is not None:
+                return torchaudio.load(path, backend=backend)
+            return torchaudio.load(path)
+        except Exception as e:
+            errors.append(f"torchaudio(backend={backend!r}): {e}")
+
+    # 2. Try soundfile directly (handles wav, flac, ogg; NOT mp3)
+    try:
+        import soundfile as sf
+        data, sr = sf.read(path, always_2d=True)
+        # soundfile returns (samples, channels), torchaudio returns (channels, samples)
+        waveform = torch.from_numpy(data.T).float()
+        return waveform, sr
+    except Exception as e:
+        errors.append(f"soundfile: {e}")
+
+    # 3. Try librosa (handles mp3 via audioread/ffmpeg)
+    try:
+        import librosa
+        import numpy as np
+        data, sr = librosa.load(path, sr=None, mono=False)
+        if data.ndim == 1:
+            data = data[np.newaxis, :]
+        waveform = torch.from_numpy(data).float()
+        return waveform, sr
+    except Exception as e:
+        errors.append(f"librosa: {e}")
+
+    detail = "; ".join(errors)
+    raise RuntimeError(f"Failed to load audio file '{path}'. Errors: {detail}")
+
+
 def _load_audio_files(audio_paths: list[Path]) -> list[dict]:
     try:
         import torchaudio
@@ -44,7 +85,7 @@ def _load_audio_files(audio_paths: list[Path]) -> list[dict]:
 
     loaded_tracks: list[dict] = []
     for audio_path in audio_paths:
-        waveform, sample_rate = torchaudio.load(str(audio_path))
+        waveform, sample_rate = _torchaudio_load(torchaudio, str(audio_path))
         loaded_tracks.append(
             {
                 "path": str(audio_path),

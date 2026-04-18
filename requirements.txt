@@ -1,2 +1,5 @@
 moderngl
 Pillow
+numpy
+soundfile
+librosa

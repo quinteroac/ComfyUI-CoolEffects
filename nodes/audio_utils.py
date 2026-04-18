@@ -50,6 +50,36 @@ def _preview_feature_frame(frame_index: int, fps: float) -> dict[str, float | bo
     }
 
 
+def _preview_feature_frames_batch(frame_count: int, fps: float) -> list[dict]:
+    """Vectorized equivalent of calling _preview_feature_frame for each frame."""
+    if frame_count == 0:
+        return []
+    safe_fps = max(float(fps), 1.0)
+    t = np.arange(frame_count, dtype=np.float64) / safe_fps
+    phase = (2.0 * math.pi * _PREVIEW_SINE_HZ) * t
+    sample_indices = np.arange(WAVEFORM_SAMPLE_COUNT, dtype=np.float64)
+    waveform_matrix = np.sin(
+        phase[:, None] + (2.0 * math.pi / WAVEFORM_SAMPLE_COUNT) * sample_indices[None, :]
+    )
+    sin_phase = np.sin(phase)
+    rms_values = np.abs(sin_phase) * 0.5
+    bass_values = np.maximum(0.0, sin_phase * 0.6)
+    mid_values = np.maximum(0.0, np.sin(phase + math.pi / 3.0) * 0.5)
+    treble_values = np.maximum(0.0, np.sin(phase + 2.0 * math.pi / 3.0) * 0.4)
+    waveform_lists = waveform_matrix.tolist()
+    return [
+        {
+            "rms": float(rms_values[i]),
+            "beat": False,
+            "bass": float(bass_values[i]),
+            "mid": float(mid_values[i]),
+            "treble": float(treble_values[i]),
+            "waveform": waveform_lists[i],
+        }
+        for i in range(frame_count)
+    ]
+
+
 def _resolve_sample_rate(audio_tensor, mono_audio: np.ndarray, duration: float) -> float:
     # Unwrap list/tuple wrappers to find the audio dict.
     candidate = audio_tensor
@@ -139,18 +169,18 @@ def _coerce_audio_to_mono(audio_tensor) -> np.ndarray:
 
 
 def _compute_rms_per_frame(mono_audio: np.ndarray, frame_count: int) -> np.ndarray:
+    if frame_count == 0 or mono_audio.size == 0:
+        return np.zeros((frame_count,), dtype=np.float32)
     frame_edges = np.linspace(0, mono_audio.shape[0], frame_count + 1, dtype=np.int64)
-    rms_values = np.zeros((frame_count,), dtype=np.float32)
-    for index in range(frame_count):
-        start = int(frame_edges[index])
-        end = int(frame_edges[index + 1])
-        if end <= start:
-            continue
-        segment = mono_audio[start:end]
-        if segment.size == 0:
-            continue
-        energy = float(np.mean(segment * segment))
-        rms_values[index] = float(np.sqrt(energy))
+    starts = frame_edges[:-1]
+    sizes = (frame_edges[1:] - starts).astype(np.int64)
+    # np.add.reduceat sums each contiguous slice [starts[i]:starts[i+1]] in a
+    # single C loop without allocating a cumsum over the whole audio.
+    squared = mono_audio * mono_audio  # float32
+    sums = np.add.reduceat(squared, starts).astype(np.float32, copy=False)
+    safe_sizes = np.maximum(sizes, 1).astype(np.float32)
+    mean_energy = np.where(sizes > 0, sums / safe_sizes, np.float32(0.0))
+    rms_values = np.sqrt(np.maximum(mean_energy, 0.0)).astype(np.float32, copy=False)
     return np.clip(rms_values, 0.0, 1.0)
 
 
@@ -164,22 +194,23 @@ def _detect_beats_energy_spike(rms_values: np.ndarray, fps: int) -> np.ndarray:
     threshold_multiplier = 1.6
     min_energy = 1e-4
 
-    for index in range(1, frame_count - 1):
-        baseline_start = max(0, index - rolling_window)
-        baseline = rms_values[baseline_start:index]
-        if baseline.size == 0:
-            continue
-        rolling_mean = float(np.mean(baseline))
-        current_energy = float(rms_values[index])
-        if current_energy < min_energy:
-            continue
-        is_local_peak = current_energy > float(rms_values[index - 1]) and current_energy >= float(
-            rms_values[index + 1]
-        )
-        is_spike = current_energy > (rolling_mean * threshold_multiplier)
-        if is_local_peak and is_spike:
-            beat_flags[index] = True
+    # Rolling mean over a trailing window [index-rolling_window, index) using
+    # prefix sums — equivalent to the previous Python-loop mean but O(n) total.
+    rms_f64 = rms_values.astype(np.float64, copy=False)
+    prefix_sum = np.concatenate(([0.0], np.cumsum(rms_f64)))
+    indices = np.arange(frame_count, dtype=np.int64)
+    baseline_start = np.maximum(0, indices - rolling_window)
+    baseline_count = indices - baseline_start
+    baseline_sum = prefix_sum[indices] - prefix_sum[baseline_start]
+    rolling_mean = np.where(baseline_count > 0, baseline_sum / np.maximum(baseline_count, 1), 0.0)
 
+    inner = slice(1, frame_count - 1)
+    current = rms_f64[inner]
+    is_local_peak = (current > rms_f64[:-2]) & (current >= rms_f64[2:])
+    is_spike = current > (rolling_mean[inner] * threshold_multiplier)
+    is_loud_enough = current >= min_energy
+    has_baseline = baseline_count[inner] > 0
+    beat_flags[inner] = is_local_peak & is_spike & is_loud_enough & has_baseline
     return beat_flags
 
 
@@ -201,31 +232,51 @@ def _compute_frequency_band_rms_per_frame(
     # FFT numerical noise from producing ghost bass/mid/treble values in silences.
     _SILENCE_THRESHOLD = 1e-3
 
-    frame_edges = np.linspace(0, mono_audio.shape[0], frame_count + 1, dtype=np.int64)
     bass_values = np.zeros((frame_count,), dtype=np.float32)
     mid_values = np.zeros((frame_count,), dtype=np.float32)
     treble_values = np.zeros((frame_count,), dtype=np.float32)
+    if frame_count == 0 or mono_audio.size == 0:
+        return bass_values, mid_values, treble_values
 
+    frame_edges = np.linspace(0, mono_audio.shape[0], frame_count + 1, dtype=np.int64)
+    starts = frame_edges[:-1].astype(np.int64)
+    ends = frame_edges[1:].astype(np.int64)
+    sizes = (ends - starts).astype(np.int64)
+    max_size = int(sizes.max()) if sizes.size else 0
+    if max_size == 0:
+        return bass_values, mid_values, treble_values
+
+    # Zero-pad segments into a uniform matrix so np.fft.rfft can batch them.
+    # Shorter segments get trailing zeros — this shifts the frequency resolution
+    # by at most 1 bin, negligible for the coarse bass/mid/treble bands used here.
+    segments = np.zeros((frame_count, max_size), dtype=np.float32)
     for index in range(frame_count):
-        start = int(frame_edges[index])
-        end = int(frame_edges[index + 1])
-        if end <= start:
-            continue
-        segment = mono_audio[start:end]
-        if segment.size == 0:
-            continue
+        segment_size = int(sizes[index])
+        if segment_size > 0:
+            segments[index, :segment_size] = mono_audio[starts[index] : ends[index]]
 
-        # Skip FFT entirely for silent frames.
-        segment_rms = float(np.sqrt(np.mean(segment * segment)))
-        if segment_rms < _SILENCE_THRESHOLD:
-            continue
+    # Silence gate — identical threshold to the previous per-frame implementation.
+    segment_rms = np.sqrt(np.mean(segments * segments, axis=1))
+    active_mask = segment_rms >= _SILENCE_THRESHOLD
+    if not np.any(active_mask):
+        return bass_values, mid_values, treble_values
 
-        magnitudes = np.abs(np.fft.rfft(segment))
-        frequencies = np.fft.rfftfreq(segment.size, d=1.0 / sample_rate)
+    magnitudes = np.abs(np.fft.rfft(segments[active_mask], axis=1))
+    frequencies = np.fft.rfftfreq(max_size, d=1.0 / sample_rate)
 
-        bass_values[index] = _rms_magnitude_in_band(magnitudes, frequencies, 20.0, 250.0)
-        mid_values[index] = _rms_magnitude_in_band(magnitudes, frequencies, 250.0, 4000.0)
-        treble_values[index] = _rms_magnitude_in_band(magnitudes, frequencies, 4000.0, 20000.01)
+    bass_mask = (frequencies >= 20.0) & (frequencies < 250.0)
+    mid_mask = (frequencies >= 250.0) & (frequencies < 4000.0)
+    treble_mask = (frequencies >= 4000.0) & (frequencies < 20000.01)
+
+    def _band_rms(band_mask: np.ndarray) -> np.ndarray:
+        if not np.any(band_mask):
+            return np.zeros((int(active_mask.sum()),), dtype=np.float32)
+        band = magnitudes[:, band_mask]
+        return np.sqrt(np.mean(band * band, axis=1)).astype(np.float32, copy=False)
+
+    bass_values[active_mask] = _band_rms(bass_mask)
+    mid_values[active_mask] = _band_rms(mid_mask)
+    treble_values[active_mask] = _band_rms(treble_mask)
 
     return bass_values, mid_values, treble_values
 
@@ -254,18 +305,50 @@ def _resample_waveform(segment: np.ndarray, sample_count: int) -> np.ndarray:
 
 
 def _compute_waveform_per_frame(mono_audio: np.ndarray, frame_count: int, sample_count: int) -> list[list[float]]:
-    frame_edges = np.linspace(0, mono_audio.shape[0], frame_count + 1, dtype=np.int64)
-    waveforms: list[list[float]] = []
-    for index in range(frame_count):
-        start = int(frame_edges[index])
-        end = int(frame_edges[index + 1])
-        if end <= start:
-            waveforms.append([0.0] * sample_count)
-            continue
-        segment = mono_audio[start:end]
-        resampled = _resample_waveform(segment, sample_count)
-        waveforms.append(resampled.tolist())
-    return waveforms
+    if frame_count == 0:
+        return []
+    if mono_audio.size == 0:
+        zero_row = [0.0] * sample_count
+        return [list(zero_row) for _ in range(frame_count)]
+
+    finite_audio = np.nan_to_num(mono_audio, nan=0.0, posinf=0.0, neginf=0.0).astype(
+        np.float32, copy=False
+    )
+    finite_audio = np.clip(finite_audio, -1.0, 1.0)
+
+    frame_edges = np.linspace(0, finite_audio.shape[0], frame_count + 1, dtype=np.int64)
+    starts = frame_edges[:-1].astype(np.int64)
+    ends = frame_edges[1:].astype(np.int64)
+    sizes = (ends - starts).astype(np.int64)
+
+    # Vectorized linear interpolation across all frames at once. For each frame i
+    # we want sample_count equispaced samples inside [start_i, end_i); build a
+    # (frame_count, sample_count) matrix of fractional indices, then do a single
+    # fancy lookup + weighted average.
+    target_norm = np.linspace(0.0, 1.0, sample_count, dtype=np.float64)
+    sample_positions = starts[:, None].astype(np.float64) + target_norm[None, :] * np.maximum(
+        sizes[:, None].astype(np.float64) - 1.0, 0.0
+    )
+    floor_indices = np.floor(sample_positions).astype(np.int64)
+    max_index = max(finite_audio.size - 1, 0)
+    floor_indices = np.clip(floor_indices, 0, max_index)
+    ceil_indices = np.clip(floor_indices + 1, 0, max_index)
+    frac = (sample_positions - floor_indices).astype(np.float32)
+
+    floor_samples = finite_audio[floor_indices]
+    ceil_samples = finite_audio[ceil_indices]
+    interpolated = floor_samples * (1.0 - frac) + ceil_samples * frac
+
+    empty_mask = sizes == 0
+    if np.any(empty_mask):
+        interpolated[empty_mask] = 0.0
+
+    single_sample_mask = sizes == 1
+    if np.any(single_sample_mask):
+        single_values = finite_audio[starts[single_sample_mask]].astype(np.float32, copy=False)
+        interpolated[single_sample_mask] = single_values[:, None]
+
+    return interpolated.tolist()
 
 
 def extract_audio_features(audio_tensor, fps, duration) -> list[dict]:
@@ -276,12 +359,12 @@ def extract_audio_features(audio_tensor, fps, duration) -> list[dict]:
         return []
 
     if audio_tensor is None or isinstance(audio_tensor, str):
-        return [_preview_feature_frame(i, float(fps)) for i in range(frame_count)]
+        return _preview_feature_frames_batch(frame_count, float(fps))
 
     mono_audio = _coerce_audio_to_mono(audio_tensor)
 
     if mono_audio.size == 0:
-        return [_preview_feature_frame(i, float(fps)) for i in range(frame_count)]
+        return _preview_feature_frames_batch(frame_count, float(fps))
 
     sample_rate = _resolve_sample_rate(audio_tensor, mono_audio, float(duration))
     rms_values = _compute_rms_per_frame(mono_audio, frame_count)
