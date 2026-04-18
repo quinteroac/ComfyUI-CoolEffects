@@ -20,6 +20,14 @@ def test_video_mixer_node_has_directory_input():
     required_inputs = module.CoolVideoMixer.INPUT_TYPES()["required"]
 
     assert required_inputs["directory_path"] == ("STRING", {"default": ""})
+    assert required_inputs["transition_type"] == (
+        ["crossfade", "hard_cut", "fade_to_black"],
+        {"default": "crossfade"},
+    )
+    assert required_inputs["transition_duration"] == (
+        "FLOAT",
+        {"default": 1.0, "min": 0.1, "max": 10.0, "step": 0.1},
+    )
 
 
 def test_video_mixer_scans_case_insensitive_extensions_and_loads_sorted_files(tmp_path):
@@ -31,7 +39,11 @@ def test_video_mixer_scans_case_insensitive_extensions_and_loads_sorted_files(tm
 
     module = _load_module("cool_effects_video_mixer_scan_test", "nodes/video_mixer.py")
     node = module.CoolVideoMixer()
-    (video_files,) = node.execute(directory_path=str(tmp_path))
+    (video_files,) = node.execute(
+        directory_path=str(tmp_path),
+        transition_type="fade_to_black",
+        transition_duration=2.4,
+    )
 
     assert video_files.splitlines() == [
         str(tmp_path / "a_clip.mp4"),
@@ -39,6 +51,16 @@ def test_video_mixer_scans_case_insensitive_extensions_and_loads_sorted_files(tm
         str(tmp_path / "c_clip.WebM"),
         str(tmp_path / "d_clip.MkV"),
     ]
+
+
+def test_video_mixer_ignores_transition_duration_for_hard_cut():
+    module = _load_module("cool_effects_video_mixer_hard_cut_duration_test", "nodes/video_mixer.py")
+
+    short_duration = module._resolve_effective_transition_duration("hard_cut", 0.1)
+    long_duration = module._resolve_effective_transition_duration("hard_cut", 9.9)
+
+    assert short_duration == 0.0
+    assert long_duration == 0.0
 
 
 def test_video_mixer_raises_when_directory_path_is_empty():
