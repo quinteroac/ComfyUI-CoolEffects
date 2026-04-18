@@ -29,3 +29,13 @@
 **Pitfalls Encountered:** Previous tests asserted `STRING` output from `CoolVideoMixer`; those had to be reworked around internal helpers and a fake `comfy_api.latest` shim once the node began producing `VIDEO` output.
 
 **Useful Context for Future Agents:** `nodes/video_mixer.py` now contains both visual and audio transition implementations with matching shapes; if later stories add preview metadata/UI payloads, keep `result` output compatible with current `VIDEO` construction and preserve the non-`hard_cut` adjacent-duration guard for both frame and audio overlap assumptions.
+
+## US-004 — Output a mixed VIDEO
+
+**Summary:** Finalized `CoolVideoMixer` `VIDEO` output coverage by asserting `RETURN_TYPES/RETURN_NAMES`, verifying assembly through `comfy_api.latest.InputImpl.VideoFromComponents` with the mixed frame tensor plus mixed audio payload, and validating compatibility with `CoolVideoPlayer` preview flow.
+
+**Key Decisions:** Kept production node behavior unchanged (it already emitted `VIDEO` with `VideoFromComponents`) and strengthened tests to lock the contract by capturing the exact `VideoComponents` passed into `InputImpl.VideoFromComponents`.
+
+**Pitfalls Encountered:** Browser-level visual verification is environment-dependent; to keep CI-safe confidence, the story adds an integration-style test that feeds `CoolVideoMixer` output into `CoolVideoPlayer` and validates preview entry materialization.
+
+**Useful Context for Future Agents:** The `_install_fake_comfy_api` helper in `tests/test_video_mixer_node.py` now supports call logging and a `_FakeVideo` with `save_to/get_dimensions`, so future mixer/player compatibility tests can reuse it without touching runtime node code.
