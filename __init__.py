@@ -226,6 +226,12 @@ _audio_mixer_module = _load_module_from_path(
 )
 CoolAudioMixer = _audio_mixer_module.CoolAudioMixer
 
+_video_mixer_module = _load_module_from_path(
+    "cool_effects_video_mixer_runtime",
+    PACKAGE_ROOT / "nodes" / "video_mixer.py",
+)
+CoolVideoMixer = _video_mixer_module.CoolVideoMixer
+
 _video_player_module = _load_module_from_path(
     "cool_effects_video_player_runtime",
     PACKAGE_ROOT / "nodes" / "video_player.py",
@@ -279,6 +285,7 @@ NODE_CLASS_MAPPINGS = {
     "CoolPanDownEffect": CoolPanDownEffect,
     "CoolPanDiagonalEffect": CoolPanDiagonalEffect,
     "CoolAudioMixer": CoolAudioMixer,
+    "CoolVideoMixer": CoolVideoMixer,
     "CoolVideoPlayer": CoolVideoPlayer,
 }
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -315,6 +322,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CoolPanDownEffect": "Cool Pan Down Effect",
     "CoolPanDiagonalEffect": "Cool Pan Diagonal Effect",
     "CoolAudioMixer": "Cool Audio Mixer",
+    "CoolVideoMixer": "Cool Video Mixer",
     "CoolVideoPlayer": "Cool Video Player",
 }
 

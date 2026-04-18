@@ -32,6 +32,7 @@ ComfyUI-CoolEffects is a custom node package for applying GLSL-driven effects to
 - `CoolToneMappingEffect`: outputs tone-mapping `EFFECT_PARAMS` for none/BW/sepia/duotone modes with intensity + duotone shadow/highlight color controls and includes a live preview widget.
 - `CoolTextOverlayEffect`: outputs text-overlay `EFFECT_PARAMS` from text/font/color/position/animation controls and includes a live preview widget.
 - `CoolAudioMixer`: loads and mixes directory audio tracks with transitions, outputting standard ComfyUI `AUDIO`.
+- `CoolVideoMixer`: loads supported video files from a directory in case-insensitive filename order.
 - `CoolVideoGenerator`: renders shader-driven frame batches from an input image and accepts chained `effect_params_1`…`effect_params_8` inputs.
 - `CoolVideoPlayer`: accepts a `VIDEO` input and previews decoded frames in an embedded canvas widget.
 
