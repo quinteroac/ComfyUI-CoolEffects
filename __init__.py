@@ -124,6 +124,12 @@ _pixelate_effect_module = _load_module_from_path(
 )
 CoolPixelateEffect = _pixelate_effect_module.CoolPixelateEffect
 
+_dithering_effect_module = _load_module_from_path(
+    "cool_effects_dithering_effect_runtime",
+    PACKAGE_ROOT / "nodes" / "dithering_effect.py",
+)
+CoolDitheringEffect = _dithering_effect_module.CoolDitheringEffect
+
 _tilt_shift_effect_module = _load_module_from_path(
     "cool_effects_tilt_shift_effect_runtime",
     PACKAGE_ROOT / "nodes" / "tilt_shift_effect.py",
@@ -274,6 +280,7 @@ NODE_CLASS_MAPPINGS = {
     "CoolFisheyeEffect": CoolFisheyeEffect,
     "CoolVignetteEffect": CoolVignetteEffect,
     "CoolPixelateEffect": CoolPixelateEffect,
+    "CoolDitheringEffect": CoolDitheringEffect,
     "CoolTiltShiftEffect": CoolTiltShiftEffect,
     "CoolPincushionEffect": CoolPincushionEffect,
     "CoolChromaticAberrationEffect": CoolChromaticAberrationEffect,
@@ -312,6 +319,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CoolFisheyeEffect": "Cool Fisheye Effect",
     "CoolVignetteEffect": "Cool Vignette Effect",
     "CoolPixelateEffect": "Cool Pixelate Effect",
+    "CoolDitheringEffect": "Cool Dithering Effect",
     "CoolTiltShiftEffect": "Cool Tilt-Shift Effect",
     "CoolPincushionEffect": "Cool Pincushion Effect",
     "CoolChromaticAberrationEffect": "Cool Chromatic Aberration Effect",

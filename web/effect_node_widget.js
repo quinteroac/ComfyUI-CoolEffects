@@ -175,6 +175,11 @@ const EFFECT_DEFAULT_UNIFORMS = Object.freeze({
         u_pixel_size: 8.0,
         u_aspect_ratio: 1.0,
     }),
+    dithering: Object.freeze({
+        u_dither_scale: 1.0,
+        u_threshold: 0.5,
+        u_palette_size: 2.0,
+    }),
     waveform: Object.freeze({
         u_line_thickness: 0.005,
         u_waveform_height: 0.2,

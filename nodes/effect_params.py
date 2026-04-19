@@ -141,6 +141,11 @@ DEFAULT_PARAMS: dict[str, dict] = {
         "u_pixel_size": 8.0,
         "u_aspect_ratio": 1.0,
     },
+    "dithering": {
+        "u_dither_scale": 1.0,
+        "u_threshold": 0.5,
+        "u_palette_size": 2.0,
+    },
     "pan_left": {
         "u_speed": 0.1,
         "u_origin_x": 0.0,
