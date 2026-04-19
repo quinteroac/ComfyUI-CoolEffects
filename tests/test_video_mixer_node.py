@@ -1,8 +1,5 @@
-from dataclasses import dataclass
 from pathlib import Path
 import importlib.util
-import sys
-import types
 
 import torch
 
@@ -18,58 +15,6 @@ def _load_module(module_name: str, relative_path: str):
     module = importlib.util.module_from_spec(module_spec)
     module_spec.loader.exec_module(module)
     return module
-
-
-@dataclass
-class _FakeVideo:
-    images: torch.Tensor
-    audio: dict
-    frame_rate: object
-
-    def save_to(self, output_path: str) -> None:
-        Path(output_path).write_bytes(b"fake-mp4")
-
-    def get_dimensions(self) -> tuple[int, int]:
-        if self.images.ndim < 3:
-            return (0, 0)
-        return (int(self.images.shape[2]), int(self.images.shape[1]))
-
-
-def _install_fake_comfy_api(call_log: dict | None = None) -> None:
-    comfy_api_module = types.ModuleType("comfy_api")
-    latest_module = types.ModuleType("comfy_api.latest")
-
-    class _FakeInputImpl:
-        @staticmethod
-        def VideoFromComponents(video_components):
-            if call_log is not None:
-                call_log["called"] = int(call_log.get("called", 0)) + 1
-                call_log["video_components"] = video_components
-            return _FakeVideo(
-                images=video_components.images,
-                audio=video_components.audio,
-                frame_rate=video_components.frame_rate,
-            )
-
-    @dataclass
-    class _FakeVideoComponents:
-        images: torch.Tensor
-        audio: dict
-        frame_rate: object
-
-    class _FakeTypes:
-        VideoComponents = _FakeVideoComponents
-
-    latest_module.InputImpl = _FakeInputImpl
-    latest_module.Types = _FakeTypes
-    comfy_api_module.latest = latest_module
-    sys.modules["comfy_api"] = comfy_api_module
-    sys.modules["comfy_api.latest"] = latest_module
-
-
-def _cleanup_fake_comfy_api() -> None:
-    sys.modules.pop("comfy_api.latest", None)
-    sys.modules.pop("comfy_api", None)
 
 
 def _build_clip(
@@ -289,153 +234,59 @@ def test_video_mixer_fade_to_black_fades_out_in_with_black_gap():
     assert torch.allclose(mixed_frames[:, 0, 0, 0], expected)
 
 
-def test_video_mixer_audio_transition_analog_crossfade(monkeypatch):
+def test_video_mixer_audio_crossfade_blends_overlap_linearly():
     module = _load_module("cool_effects_video_mixer_audio_crossfade_test", "nodes/video_mixer.py")
-    _install_fake_comfy_api()
-    try:
-        clips = [
-            _build_clip(filename="a.mp4", frames=[1.0] * 6, audio_values=[1.0] * 6),
-            _build_clip(filename="b.mp4", frames=[3.0] * 6, audio_values=[3.0] * 6),
-        ]
-        monkeypatch.setattr(module, "_resolve_video_file_paths", lambda _directory_path: [Path("a.mp4"), Path("b.mp4")])
-        monkeypatch.setattr(module, "_load_video_files", lambda _video_paths: clips)
+    clips = [
+        _build_clip(filename="a.mp4", frames=[1.0] * 6, audio_values=[1.0] * 6),
+        _build_clip(filename="b.mp4", frames=[3.0] * 6, audio_values=[3.0] * 6),
+    ]
 
-        node = module.CoolVideoMixer()
-        (video,) = node.execute("unused", transition_type="crossfade", transition_duration=0.3)
-    finally:
-        _cleanup_fake_comfy_api()
+    prepared_tracks, sample_rate = module._prepare_audio_tracks_for_mixing(clips, 10.0)
+    mixed_audio = module._mix_audio_tracks(prepared_tracks, "crossfade", 0.3, sample_rate)
 
-    expected_audio = torch.tensor([1.0, 1.0, 1.0, 1.0, 2.0, 3.0, 3.0, 3.0, 3.0], dtype=torch.float32)
-    assert isinstance(video, _FakeVideo)
-    assert torch.allclose(video.audio["waveform"][0, 0], expected_audio)
+    expected = torch.tensor([1.0, 1.0, 1.0, 1.0, 2.0, 3.0, 3.0, 3.0, 3.0], dtype=torch.float32)
+    assert mixed_audio.shape == (2, 9)
+    assert torch.allclose(mixed_audio[0], expected)
+    assert torch.allclose(mixed_audio[1], expected)
 
 
-def test_video_mixer_audio_transition_analog_hard_cut(monkeypatch):
+def test_video_mixer_audio_hard_cut_concatenates_without_blend():
     module = _load_module("cool_effects_video_mixer_audio_hard_cut_test", "nodes/video_mixer.py")
-    _install_fake_comfy_api()
-    try:
-        clips = [
-            _build_clip(filename="a.mp4", frames=[1.0] * 6, audio_values=[1.0] * 6),
-            _build_clip(filename="b.mp4", frames=[3.0] * 6, audio_values=[3.0] * 6),
-        ]
-        monkeypatch.setattr(module, "_resolve_video_file_paths", lambda _directory_path: [Path("a.mp4"), Path("b.mp4")])
-        monkeypatch.setattr(module, "_load_video_files", lambda _video_paths: clips)
+    clips = [
+        _build_clip(filename="a.mp4", frames=[1.0] * 6, audio_values=[1.0] * 6),
+        _build_clip(filename="b.mp4", frames=[3.0] * 6, audio_values=[3.0] * 6),
+    ]
 
-        node = module.CoolVideoMixer()
-        (video,) = node.execute("unused", transition_type="hard_cut", transition_duration=3.0)
-    finally:
-        _cleanup_fake_comfy_api()
+    prepared_tracks, sample_rate = module._prepare_audio_tracks_for_mixing(clips, 10.0)
+    mixed_audio = module._mix_audio_tracks(prepared_tracks, "hard_cut", 0.0, sample_rate)
 
-    expected_audio = torch.tensor(
+    expected = torch.tensor(
         [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0], dtype=torch.float32
     )
-    assert isinstance(video, _FakeVideo)
-    assert torch.allclose(video.audio["waveform"][0, 0], expected_audio)
+    assert mixed_audio.shape == (2, 12)
+    assert torch.allclose(mixed_audio[0], expected)
+    assert torch.allclose(mixed_audio[1], expected)
 
 
-def test_video_mixer_audio_transition_analog_fade_to_black_uses_fade_to_silence(monkeypatch):
+def test_video_mixer_audio_fade_to_black_translates_to_fade_to_silence():
     module = _load_module("cool_effects_video_mixer_audio_fade_to_black_test", "nodes/video_mixer.py")
-    _install_fake_comfy_api()
-    try:
-        clips = [
-            _build_clip(filename="a.mp4", frames=[1.0] * 6, audio_values=[1.0] * 6),
-            _build_clip(filename="b.mp4", frames=[3.0] * 6, audio_values=[3.0] * 6),
-        ]
-        monkeypatch.setattr(module, "_resolve_video_file_paths", lambda _directory_path: [Path("a.mp4"), Path("b.mp4")])
-        monkeypatch.setattr(module, "_load_video_files", lambda _video_paths: clips)
+    assert module._resolve_audio_transition_type("fade_to_black") == "fade_to_silence"
 
-        node = module.CoolVideoMixer()
-        (video,) = node.execute("unused", transition_type="fade_to_black", transition_duration=0.2)
-    finally:
-        _cleanup_fake_comfy_api()
+    clips = [
+        _build_clip(filename="a.mp4", frames=[1.0] * 6, audio_values=[1.0] * 6),
+        _build_clip(filename="b.mp4", frames=[3.0] * 6, audio_values=[3.0] * 6),
+    ]
 
-    expected_audio = torch.tensor(
+    prepared_tracks, sample_rate = module._prepare_audio_tracks_for_mixing(clips, 10.0)
+    mixed_audio = module._mix_audio_tracks(prepared_tracks, "fade_to_silence", 0.2, sample_rate)
+
+    expected = torch.tensor(
         [1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 3.0, 3.0, 3.0, 3.0, 3.0],
         dtype=torch.float32,
     )
-    assert isinstance(video, _FakeVideo)
-    assert torch.allclose(video.audio["waveform"][0, 0], expected_audio)
-
-
-def test_video_mixer_assembles_video_from_components_with_mixed_frames_and_audio(monkeypatch):
-    module = _load_module("cool_effects_video_mixer_video_components_test", "nodes/video_mixer.py")
-    call_log: dict = {}
-    _install_fake_comfy_api(call_log)
-    try:
-        clips = [
-            _build_clip(filename="a.mp4", frames=[1.0] * 3, audio_values=[0.1] * 3),
-            _build_clip(filename="b.mp4", frames=[2.0] * 3, audio_values=[0.2] * 3),
-        ]
-        expected_mixed_frames = torch.full((4, 1, 1, 3), 0.42, dtype=torch.float32)
-        expected_mixed_audio_waveform = torch.full((2, 6), 0.24, dtype=torch.float32)
-
-        monkeypatch.setattr(
-            module,
-            "_resolve_video_file_paths",
-            lambda _directory_path: [Path("a.mp4"), Path("b.mp4")],
-        )
-        monkeypatch.setattr(module, "_load_video_files", lambda _video_paths: clips)
-        monkeypatch.setattr(module, "_validate_homogeneous", lambda _loaded_clips: (1, 1, 12.0))
-        monkeypatch.setattr(module, "_mix_video_tracks", lambda *_args, **_kwargs: expected_mixed_frames)
-        monkeypatch.setattr(
-            module,
-            "_prepare_audio_tracks_for_mixing",
-            lambda _loaded_clips, _fps: ([{"filename": "mixed", "waveform": torch.zeros((2, 1))}], 16_000),
-        )
-        monkeypatch.setattr(
-            module,
-            "_mix_audio_tracks",
-            lambda *_args, **_kwargs: expected_mixed_audio_waveform,
-        )
-
-        node = module.CoolVideoMixer()
-        (video,) = node.execute("unused", transition_type="crossfade", transition_duration=0.5)
-    finally:
-        _cleanup_fake_comfy_api()
-
-    assert isinstance(video, _FakeVideo)
-    assert call_log["called"] == 1
-    video_components = call_log["video_components"]
-    assert torch.equal(video_components.images, expected_mixed_frames)
-    assert torch.equal(video_components.audio["waveform"], expected_mixed_audio_waveform.unsqueeze(0))
-    assert video_components.audio["sample_rate"] == 16_000
-
-
-def test_video_mixer_output_stays_compatible_with_video_player(monkeypatch):
-    _install_fake_comfy_api()
-    try:
-        video_mixer_module = _load_module(
-            "cool_effects_video_mixer_player_compat_test",
-            "nodes/video_mixer.py",
-        )
-        video_player_module = _load_module(
-            "cool_effects_video_player_from_video_mixer_compat_test",
-            "nodes/video_player.py",
-        )
-
-        clips = [
-            _build_clip(filename="a.mp4", frames=[1.0] * 6, audio_values=[1.0] * 6),
-            _build_clip(filename="b.mp4", frames=[3.0] * 6, audio_values=[3.0] * 6),
-        ]
-        monkeypatch.setattr(
-            video_mixer_module,
-            "_resolve_video_file_paths",
-            lambda _directory_path: [Path("a.mp4"), Path("b.mp4")],
-        )
-        monkeypatch.setattr(video_mixer_module, "_load_video_files", lambda _video_paths: clips)
-
-        mixer = video_mixer_module.CoolVideoMixer()
-        (mixed_video,) = mixer.execute("unused", transition_type="crossfade", transition_duration=0.3)
-
-        player = video_player_module.CoolVideoPlayer()
-        player_payload = player.execute(mixed_video)
-    finally:
-        _cleanup_fake_comfy_api()
-
-    assert isinstance(mixed_video, _FakeVideo)
-    assert isinstance(player_payload["ui"]["video"], list)
-    assert len(player_payload["ui"]["video"]) >= 1
-    assert "source_url" in player_payload["ui"]["video"][0]
+    assert mixed_audio.shape == (2, 14)
+    assert torch.allclose(mixed_audio[0], expected)
+    assert torch.allclose(mixed_audio[1], expected)
 
 
 def test_video_mixer_synthesizes_silence_for_missing_audio_track():

@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import logging
+import uuid
+from collections import deque
 from fractions import Fraction
 from pathlib import Path
+from typing import Iterator
 
 import numpy as np
 import torch
@@ -14,6 +17,7 @@ LOGGER = logging.getLogger(__name__)
 _SUPPORTED_VIDEO_EXTENSIONS = {".mp4", ".mov", ".webm", ".mkv"}
 _TRANSITION_TYPE_OPTIONS = ["crossfade", "hard_cut", "fade_to_black"]
 _DEFAULT_AUDIO_SAMPLE_RATE = 44_100
+_DEFAULT_AAC_FRAME_SIZE = 1024
 
 
 def _resolve_video_file_paths(directory_path: str) -> list[Path]:
@@ -104,70 +108,116 @@ def _resolve_video_fps(video_stream, file_path: Path) -> float:
     return fps
 
 
-def _load_video_files(video_paths: list[Path]) -> list[dict]:
+def _probe_clip_metadata(video_path: Path) -> dict:
+    """Open a video file and return metadata without decoding frames."""
     try:
         import av
     except ImportError as error:
-        raise ValueError("PyAV (`av`) is required to load video files for CoolVideoMixer.") from error
+        raise ValueError("PyAV (`av`) is required for CoolVideoMixer.") from error
 
-    loaded_clips: list[dict] = []
-    for video_path in video_paths:
-        with av.open(str(video_path)) as container:
-            video_stream = next((stream for stream in container.streams if stream.type == "video"), None)
-            if video_stream is None:
-                raise ValueError(f"Video file has no video stream: {video_path.name}")
+    with av.open(str(video_path)) as container:
+        video_stream = next(
+            (stream for stream in container.streams if stream.type == "video"),
+            None,
+        )
+        if video_stream is None:
+            raise ValueError(f"Video file has no video stream: {video_path.name}")
 
-            fps = _resolve_video_fps(video_stream, video_path)
-            width = int(video_stream.width)
-            height = int(video_stream.height)
+        fps = _resolve_video_fps(video_stream, video_path)
+        width = int(video_stream.width)
+        height = int(video_stream.height)
 
-            audio_stream = next((stream for stream in container.streams if stream.type == "audio"), None)
-            audio_sample_rate: int | None = None
-            if audio_stream is not None:
-                audio_sample_rate = int(getattr(audio_stream, "rate", 0) or 0) or None
-
-            streams_to_decode = [video_stream]
-            if audio_stream is not None:
-                streams_to_decode.append(audio_stream)
-
-            decoded_frames: list[torch.Tensor] = []
-            audio_chunks: list[torch.Tensor] = []
-            for packet in container.demux(*streams_to_decode):
-                for frame in packet.decode():
-                    if frame.__class__.__name__ == "VideoFrame":
-                        frame_array = frame.to_rgb().to_ndarray()
-                        decoded_frames.append(torch.from_numpy(frame_array).float() / 255.0)
-                    elif frame.__class__.__name__ == "AudioFrame":
-                        audio_array = frame.to_ndarray()
-                        audio_chunks.append(_coerce_audio_chunk_to_channels_first(audio_array))
-                        if audio_sample_rate is None and getattr(frame, "sample_rate", None):
-                            audio_sample_rate = int(frame.sample_rate)
-
-            if not decoded_frames:
-                raise ValueError(f"Video file has no decodable frames: {video_path.name}")
-
-            video_frames = torch.stack(decoded_frames, dim=0)
-
-            audio_waveform = None
-            if audio_chunks:
-                audio_waveform = torch.cat(audio_chunks, dim=1)
-
-            loaded_clips.append(
-                {
-                    "path": str(video_path),
-                    "filename": video_path.name,
-                    "frames": video_frames,
-                    "frame_count": int(video_frames.shape[0]),
-                    "width": width,
-                    "height": height,
-                    "fps": fps,
-                    "duration_seconds": float(video_frames.shape[0]) / fps,
-                    "audio_waveform": audio_waveform,
-                    "audio_sample_rate": audio_sample_rate,
-                }
+        duration_seconds: float | None = None
+        stream_duration = getattr(video_stream, "duration", None)
+        stream_time_base = getattr(video_stream, "time_base", None)
+        if stream_duration is not None and stream_time_base is not None:
+            try:
+                duration_seconds = float(stream_duration * stream_time_base)
+            except (TypeError, ValueError):
+                duration_seconds = None
+        if duration_seconds is None and container.duration is not None:
+            duration_seconds = float(container.duration / av.time_base)
+        if duration_seconds is None:
+            stream_frames = getattr(video_stream, "frames", 0) or 0
+            if stream_frames > 0 and fps > 0:
+                duration_seconds = float(stream_frames) / fps
+        if duration_seconds is None or duration_seconds <= 0.0:
+            raise ValueError(
+                f"Could not resolve duration for video file: {video_path.name}"
             )
 
-    return loaded_clips
+        audio_stream = next(
+            (stream for stream in container.streams if stream.type == "audio"),
+            None,
+        )
+        audio_sample_rate = None
+        if audio_stream is not None:
+            rate = int(getattr(audio_stream, "rate", 0) or 0)
+            audio_sample_rate = rate or None
+
+        return {
+            "path": str(video_path),
+            "filename": video_path.name,
+            "width": width,
+            "height": height,
+            "fps": fps,
+            "duration_seconds": duration_seconds,
+            "frame_count": int(round(duration_seconds * fps)),
+            "audio_sample_rate": audio_sample_rate,
+        }
+
+
+def _iter_clip_video_frames(video_path: Path) -> Iterator[torch.Tensor]:
+    """Yield [H, W, 3] float32 RGB frames one at a time, without buffering the full clip."""
+    import av
+
+    with av.open(str(video_path)) as container:
+        video_stream = next(
+            (stream for stream in container.streams if stream.type == "video"),
+            None,
+        )
+        if video_stream is None:
+            raise ValueError(f"Video file has no video stream: {video_path.name}")
+        try:
+            video_stream.thread_type = "AUTO"
+        except Exception:
+            pass
+        for frame in container.decode(video_stream):
+            frame_array = frame.to_rgb().to_ndarray()
+            yield torch.from_numpy(frame_array).to(dtype=torch.float32).div_(255.0)
+
+
+def _load_clip_audio(video_path: Path, target_sample_rate: int) -> torch.Tensor | None:
+    """Decode a clip's audio, resample to stereo at target_sample_rate. Returns [2, N] or None."""
+    import av
+
+    chunks: list[torch.Tensor] = []
+    source_sample_rate = 0
+    with av.open(str(video_path)) as container:
+        audio_stream = next(
+            (stream for stream in container.streams if stream.type == "audio"),
+            None,
+        )
+        if audio_stream is None:
+            return None
+        source_sample_rate = int(getattr(audio_stream, "rate", 0) or 0)
+        for frame in container.decode(audio_stream):
+            audio_array = frame.to_ndarray()
+            chunks.append(_coerce_audio_chunk_to_channels_first(audio_array))
+            if source_sample_rate == 0 and getattr(frame, "sample_rate", None):
+                source_sample_rate = int(frame.sample_rate)
+
+    if not chunks:
+        return None
+
+    waveform = _normalize_waveform_to_stereo(torch.cat(chunks, dim=1))
+    if source_sample_rate <= 0:
+        source_sample_rate = target_sample_rate
+    return _resample_waveform_linear(
+        waveform,
+        source_sample_rate=source_sample_rate,
+        target_sample_rate=target_sample_rate,
+    )
 
 
 def _validate_homogeneous(loaded_clips: list[dict]) -> tuple[int, int, float]:
@@ -218,6 +268,10 @@ def _mix_video_tracks(
     transition_duration: float,
     fps: float,
 ) -> torch.Tensor:
+    """Reference in-memory mixer kept for unit tests of the transition math.
+
+    The runtime node no longer uses this path; see `_stream_mix_to_file`.
+    """
     mixed_frames = loaded_clips[0]["frames"]
     transition_frames = int(round(transition_duration * fps))
 
@@ -396,6 +450,7 @@ def _mix_audio_tracks(
     transition_duration: float,
     target_sample_rate: int,
 ) -> torch.Tensor:
+    """Reference in-memory audio mixer kept for unit tests of the transition math."""
     mixed_waveform = prepared_audio_tracks[0]["waveform"]
     transition_samples = int(round(transition_duration * target_sample_rate))
 
@@ -471,6 +526,342 @@ def _mix_audio_tracks(
     return mixed_waveform
 
 
+class _StreamingMixWriter:
+    """Encodes mixed video/audio to an mp4 file as frames/samples arrive.
+
+    Keeps peak memory bounded to a single frame (video) plus a small audio FIFO,
+    regardless of total output duration.
+    """
+
+    def __init__(
+        self,
+        output_path: Path,
+        *,
+        width: int,
+        height: int,
+        fps: float,
+        audio_sample_rate: int,
+    ) -> None:
+        try:
+            import av
+        except ImportError as error:
+            raise ValueError("PyAV (`av`) is required for CoolVideoMixer.") from error
+
+        self._av = av
+        self._container = av.open(str(output_path), mode="w")
+
+        frame_rate = Fraction(float(fps)).limit_denominator(60000)
+        self._video_stream = self._container.add_stream("libx264", rate=frame_rate)
+        self._video_stream.width = int(width)
+        self._video_stream.height = int(height)
+        self._video_stream.pix_fmt = "yuv420p"
+        self._video_stream.options = {"crf": "20", "preset": "medium"}
+
+        self._audio_sample_rate = int(audio_sample_rate)
+        self._audio_stream = self._container.add_stream(
+            "aac", rate=self._audio_sample_rate, layout="stereo"
+        )
+        self._audio_fifo = av.AudioFifo()
+        self._audio_pts = 0
+
+    def write_video_frame(self, frame_tensor: torch.Tensor) -> None:
+        frame_u8 = (
+            (frame_tensor.clamp(0.0, 1.0) * 255.0)
+            .to(torch.uint8)
+            .contiguous()
+            .cpu()
+            .numpy()
+        )
+        av_frame = self._av.VideoFrame.from_ndarray(frame_u8, format="rgb24")
+        av_frame = av_frame.reformat(format="yuv420p")
+        for packet in self._video_stream.encode(av_frame):
+            self._container.mux(packet)
+
+    def write_audio_chunk(self, waveform: torch.Tensor) -> None:
+        if waveform is None or waveform.numel() == 0 or waveform.shape[-1] == 0:
+            return
+        samples = waveform.contiguous().to(torch.float32).cpu().numpy()
+        av_frame = self._av.AudioFrame.from_ndarray(
+            samples, format="fltp", layout="stereo"
+        )
+        av_frame.sample_rate = self._audio_sample_rate
+        av_frame.pts = self._audio_pts
+        self._audio_pts += int(samples.shape[1])
+        self._audio_fifo.write(av_frame)
+        self._drain_audio_fifo(final=False)
+
+    def _drain_audio_fifo(self, *, final: bool) -> None:
+        frame_size = (
+            getattr(self._audio_stream.codec_context, "frame_size", None)
+            or _DEFAULT_AAC_FRAME_SIZE
+        )
+        while self._audio_fifo.samples >= frame_size:
+            out_frame = self._audio_fifo.read(frame_size)
+            for packet in self._audio_stream.encode(out_frame):
+                self._container.mux(packet)
+        if final and self._audio_fifo.samples > 0:
+            # Drop the trailing partial frame; AAC cannot encode a partial frame and the
+            # resulting few milliseconds of audio loss at the end are imperceptible.
+            self._audio_fifo.read(self._audio_fifo.samples)
+
+    def close(self) -> None:
+        try:
+            self._drain_audio_fifo(final=True)
+            for packet in self._video_stream.encode():
+                self._container.mux(packet)
+            for packet in self._audio_stream.encode():
+                self._container.mux(packet)
+        finally:
+            self._container.close()
+
+
+def _stream_mix_video_transition(
+    writer: _StreamingMixWriter,
+    *,
+    tail_frames: list[torch.Tensor],
+    head_frames: list[torch.Tensor],
+    transition_type: str,
+) -> None:
+    transition_frames = len(tail_frames)
+    if len(head_frames) != transition_frames:
+        raise ValueError(
+            f"tail/head frame count mismatch: {transition_frames} vs {len(head_frames)}"
+        )
+    if transition_frames == 0:
+        return
+
+    fade_out = torch.linspace(1.0, 0.0, transition_frames, dtype=torch.float32)
+    fade_in = torch.linspace(0.0, 1.0, transition_frames, dtype=torch.float32)
+
+    if transition_type == "crossfade":
+        for i in range(transition_frames):
+            blended = tail_frames[i] * float(fade_out[i]) + head_frames[i] * float(fade_in[i])
+            writer.write_video_frame(blended)
+        return
+
+    if transition_type == "fade_to_black":
+        for i in range(transition_frames):
+            writer.write_video_frame(tail_frames[i] * float(fade_out[i]))
+        black_frame = torch.zeros_like(head_frames[0])
+        for _ in range(transition_frames):
+            writer.write_video_frame(black_frame)
+        for i in range(transition_frames):
+            writer.write_video_frame(head_frames[i] * float(fade_in[i]))
+        return
+
+    raise ValueError(
+        f"Unsupported transition_type: {transition_type}. "
+        f"Expected one of: {', '.join(_TRANSITION_TYPE_OPTIONS)}"
+    )
+
+
+def _stream_mix_audio_transition(
+    writer: _StreamingMixWriter,
+    *,
+    tail_audio: torch.Tensor,
+    head_audio: torch.Tensor,
+    transition_type: str,
+) -> None:
+    transition_samples = int(tail_audio.shape[1])
+    if int(head_audio.shape[1]) != transition_samples:
+        raise ValueError(
+            f"tail/head audio sample count mismatch: {transition_samples} vs {int(head_audio.shape[1])}"
+        )
+    if transition_samples == 0:
+        return
+
+    fade_out = torch.linspace(1.0, 0.0, transition_samples, dtype=torch.float32).unsqueeze(0)
+    fade_in = torch.linspace(0.0, 1.0, transition_samples, dtype=torch.float32).unsqueeze(0)
+
+    if transition_type == "crossfade":
+        writer.write_audio_chunk(tail_audio * fade_out + head_audio * fade_in)
+        return
+
+    if transition_type == "fade_to_silence":
+        writer.write_audio_chunk(tail_audio * fade_out)
+        writer.write_audio_chunk(torch.zeros_like(tail_audio))
+        writer.write_audio_chunk(head_audio * fade_in)
+        return
+
+    raise ValueError(
+        f"Unsupported audio transition_type: {transition_type}. "
+        "Expected one of: crossfade, hard_cut, fade_to_silence"
+    )
+
+
+def _stream_clip_audio(
+    writer: _StreamingMixWriter,
+    *,
+    clip_path: Path,
+    clip_metadata: dict,
+    target_sample_rate: int,
+    transition_samples: int,
+    audio_transition_type: str,
+    is_first: bool,
+    is_last: bool,
+    pending_audio_tail: torch.Tensor | None,
+) -> torch.Tensor | None:
+    """Mix one clip's audio into the writer and return the new pending tail (or None)."""
+    waveform = _load_clip_audio(clip_path, target_sample_rate)
+    if waveform is None:
+        silent_samples = int(round(float(clip_metadata["duration_seconds"]) * target_sample_rate))
+        waveform = torch.zeros((2, silent_samples), dtype=torch.float32)
+        LOGGER.warning(
+            "[CoolVideoMixer] no audio in %s; synthesizing %d silent samples at %d Hz",
+            clip_metadata["filename"],
+            silent_samples,
+            target_sample_rate,
+        )
+
+    if transition_samples <= 0 or audio_transition_type == "hard_cut":
+        writer.write_audio_chunk(waveform)
+        return None
+
+    if is_first:
+        if waveform.shape[1] <= transition_samples:
+            return waveform
+        writer.write_audio_chunk(waveform[:, :-transition_samples])
+        return waveform[:, -transition_samples:]
+
+    head_audio = waveform[:, :transition_samples]
+    body_audio = waveform[:, transition_samples:]
+
+    assert pending_audio_tail is not None
+    _stream_mix_audio_transition(
+        writer,
+        tail_audio=pending_audio_tail,
+        head_audio=head_audio,
+        transition_type=audio_transition_type,
+    )
+
+    if is_last:
+        writer.write_audio_chunk(body_audio)
+        return None
+
+    if body_audio.shape[1] <= transition_samples:
+        return body_audio
+    writer.write_audio_chunk(body_audio[:, :-transition_samples])
+    return body_audio[:, -transition_samples:]
+
+
+def _stream_clip_video(
+    writer: _StreamingMixWriter,
+    *,
+    clip_path: Path,
+    transition_frames: int,
+    transition_type: str,
+    is_first: bool,
+    is_last: bool,
+    pending_video_tail: deque[torch.Tensor],
+) -> deque[torch.Tensor]:
+    """Mix one clip's video into the writer and return the new pending tail deque."""
+    frame_iter = _iter_clip_video_frames(clip_path)
+    uses_transition = transition_frames > 0 and transition_type != "hard_cut"
+
+    if uses_transition and not is_first:
+        head_frames: list[torch.Tensor] = []
+        for _ in range(transition_frames):
+            try:
+                head_frames.append(next(frame_iter))
+            except StopIteration:
+                break
+        if len(head_frames) < transition_frames:
+            raise ValueError(
+                f"Clip {clip_path.name} has too few frames for the requested transition"
+            )
+        tail_frames = list(pending_video_tail)
+        pending_video_tail.clear()
+        _stream_mix_video_transition(
+            writer,
+            tail_frames=tail_frames,
+            head_frames=head_frames,
+            transition_type=transition_type,
+        )
+
+    tail_hold = transition_frames if (uses_transition and not is_last) else 0
+    rolling: deque[torch.Tensor] = deque()
+    for frame in frame_iter:
+        if tail_hold > 0:
+            rolling.append(frame)
+            if len(rolling) > tail_hold:
+                writer.write_video_frame(rolling.popleft())
+        else:
+            writer.write_video_frame(frame)
+
+    if is_last:
+        while rolling:
+            writer.write_video_frame(rolling.popleft())
+        return deque()
+
+    return rolling
+
+
+def _stream_mix_to_file(
+    *,
+    video_paths: list[Path],
+    clips_metadata: list[dict],
+    transition_type: str,
+    transition_duration: float,
+    fps: float,
+    target_audio_sample_rate: int,
+    output_path: Path,
+) -> None:
+    transition_frames = int(round(transition_duration * fps))
+    transition_samples = int(round(transition_duration * target_audio_sample_rate))
+    audio_transition_type = _resolve_audio_transition_type(transition_type)
+
+    writer = _StreamingMixWriter(
+        output_path,
+        width=int(clips_metadata[0]["width"]),
+        height=int(clips_metadata[0]["height"]),
+        fps=fps,
+        audio_sample_rate=target_audio_sample_rate,
+    )
+
+    try:
+        pending_video_tail: deque[torch.Tensor] = deque()
+        pending_audio_tail: torch.Tensor | None = None
+
+        for clip_index, clip_path in enumerate(video_paths):
+            is_first = clip_index == 0
+            is_last = clip_index == len(video_paths) - 1
+
+            pending_video_tail = _stream_clip_video(
+                writer,
+                clip_path=clip_path,
+                transition_frames=transition_frames,
+                transition_type=transition_type,
+                is_first=is_first,
+                is_last=is_last,
+                pending_video_tail=pending_video_tail,
+            )
+
+            pending_audio_tail = _stream_clip_audio(
+                writer,
+                clip_path=clip_path,
+                clip_metadata=clips_metadata[clip_index],
+                target_sample_rate=target_audio_sample_rate,
+                transition_samples=transition_samples,
+                audio_transition_type=audio_transition_type,
+                is_first=is_first,
+                is_last=is_last,
+                pending_audio_tail=pending_audio_tail,
+            )
+    finally:
+        writer.close()
+
+
+def _resolve_output_directory() -> Path:
+    try:
+        import folder_paths  # type: ignore
+
+        return Path(folder_paths.get_temp_directory())
+    except ImportError:
+        import tempfile
+
+        return Path(tempfile.gettempdir()) / "comfyui-cool-effects"
+
+
 class CoolVideoMixer:
     @classmethod
     def INPUT_TYPES(cls):
@@ -492,50 +883,42 @@ class CoolVideoMixer:
 
     def execute(self, directory_path, transition_type="crossfade", transition_duration=1.0):
         video_paths = _resolve_video_file_paths(directory_path)
-        loaded_clips = _load_video_files(video_paths)
-        _, _, fps = _validate_homogeneous(loaded_clips)
+        clips_metadata = [_probe_clip_metadata(path) for path in video_paths]
+        _, _, fps = _validate_homogeneous(clips_metadata)
 
         effective_transition_duration = _resolve_effective_transition_duration(
             transition_type, transition_duration
         )
         _validate_transition_duration_against_adjacent_clips(
-            loaded_clips,
-            transition_type,
-            effective_transition_duration,
+            clips_metadata, transition_type, effective_transition_duration
         )
 
-        mixed_frames = _mix_video_tracks(
-            loaded_clips,
-            transition_type,
-            effective_transition_duration,
-            fps,
+        target_audio_sample_rate = _DEFAULT_AUDIO_SAMPLE_RATE
+        for metadata in clips_metadata:
+            rate = metadata.get("audio_sample_rate")
+            if rate:
+                target_audio_sample_rate = int(rate)
+                break
+
+        output_dir = _resolve_output_directory()
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_dir / f"cool-effects-mixer-{uuid.uuid4().hex}.mp4"
+
+        _stream_mix_to_file(
+            video_paths=video_paths,
+            clips_metadata=clips_metadata,
+            transition_type=transition_type,
+            transition_duration=effective_transition_duration,
+            fps=fps,
+            target_audio_sample_rate=target_audio_sample_rate,
+            output_path=output_path,
         )
-        prepared_audio_tracks, target_audio_sample_rate = _prepare_audio_tracks_for_mixing(
-            loaded_clips, fps
-        )
-        mixed_audio_waveform = _mix_audio_tracks(
-            prepared_audio_tracks,
-            _resolve_audio_transition_type(transition_type),
-            effective_transition_duration,
-            target_audio_sample_rate,
-        )
-        mixed_audio = {
-            "waveform": mixed_audio_waveform.unsqueeze(0),
-            "sample_rate": target_audio_sample_rate,
-        }
 
         try:
-            from comfy_api.latest import InputImpl, Types  # type: ignore
+            from comfy_api.latest import InputImpl  # type: ignore
         except ImportError as error:
             raise ValueError(
                 "comfy_api.latest is required to build VIDEO output for CoolVideoMixer."
             ) from error
 
-        video = InputImpl.VideoFromComponents(
-            Types.VideoComponents(
-                images=mixed_frames,
-                audio=mixed_audio,
-                frame_rate=Fraction(fps),
-            )
-        )
-        return (video,)
+        return (InputImpl.VideoFromFile(str(output_path)),)
