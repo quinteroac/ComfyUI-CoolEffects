@@ -171,6 +171,10 @@ const EFFECT_DEFAULT_UNIFORMS = Object.freeze({
         u_highlight_g: 1.0,
         u_highlight_b: 1.0,
     }),
+    pixelate: Object.freeze({
+        u_pixel_size: 8.0,
+        u_aspect_ratio: 1.0,
+    }),
     waveform: Object.freeze({
         u_line_thickness: 0.005,
         u_waveform_height: 0.2,

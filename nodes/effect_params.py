@@ -137,6 +137,10 @@ DEFAULT_PARAMS: dict[str, dict] = {
         "u_highlight_g": 1.0,
         "u_highlight_b": 1.0,
     },
+    "pixelate": {
+        "u_pixel_size": 8.0,
+        "u_aspect_ratio": 1.0,
+    },
     "pan_left": {
         "u_speed": 0.1,
         "u_origin_x": 0.0,
