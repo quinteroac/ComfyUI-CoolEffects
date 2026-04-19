@@ -29,3 +29,13 @@
 **Pitfalls Encountered:** Full Python suite still has the known unrelated baseline failure in `tests/test_video_mixer_node.py::test_video_mixer_assembles_video_from_components_with_mixed_frames_and_audio`; targeted story-specific Python and JS checks pass.
 
 **Useful Context for Future Agents:** For RGB-channel effects, mirror both defaults registries (`nodes/effect_params.py` and `web/effect_node_widget.js`) and validate shader formula strings in node tests; this catches backend/frontend drift early and keeps preview/render semantics consistent.
+
+## US-004 — CRT Pixel Grid Effect Node
+
+**Summary:** Implemented `CoolCrtPixelGridEffect` end-to-end with node registration, `crt_pixel_grid` default params, a new `crt_pixel_grid.frag` shader, frontend live-preview extension wiring, and Python/JS tests for input contract, payload shape, shader contract, package registration, and video-generator effect chaining.
+
+**Key Decisions:** Reused the existing per-effect architecture (`build_effect_params`, importlib-loaded node module in `__init__.py`, and `mount_effect_node_widget` in frontend) and used a shader design that pixelates sampling to cell centers, then layers a vertical RGB triad mask and alternating scanline darkening controlled by independent strengths.
+
+**Pitfalls Encountered:** Runtime validation in this environment cannot execute `pytest` (`No module named pytest`) and cannot import package-level `__init__.py` in smoke scripts when optional deps like `torch` are absent; used targeted JS tests plus Python compile/smoke checks without optional runtime dependencies.
+
+**Useful Context for Future Agents:** For new visual effects, keep backend `DEFAULT_PARAMS` and frontend `EFFECT_DEFAULT_UNIFORMS` in sync for consistent live-preview defaults, and add explicit shader-string assertions for both the shared uniform contract and the effect’s key visual formulas to reduce drift between intended look and implementation.

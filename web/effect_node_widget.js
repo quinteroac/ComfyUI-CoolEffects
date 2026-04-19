@@ -180,6 +180,11 @@ const EFFECT_DEFAULT_UNIFORMS = Object.freeze({
         u_pixel_size: 8.0,
         u_aspect_ratio: 1.0,
     }),
+    crt_pixel_grid: Object.freeze({
+        u_pixel_size: 6.0,
+        u_grid_strength: 0.6,
+        u_scanline_strength: 0.4,
+    }),
     dithering: Object.freeze({
         u_dither_scale: 1.0,
         u_threshold: 0.5,
