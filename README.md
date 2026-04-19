@@ -58,3 +58,40 @@ To validate the 512x512, 3s, 30fps under-30s requirement on real GPU hardware, r
 `python tests/manual_gpu_benchmark.py --effect-name glitch --width 512 --height 512 --fps 30 --duration 3 --threshold-seconds 30`
 
 The script prints a JSON report and exits non-zero when the run exceeds the threshold.
+
+## Quick Start
+
+- **Install dependencies:**
+
+	```bash
+	pip install -r requirements.txt
+	```
+
+- **Install package:** copy this folder into your ComfyUI `custom_nodes/` directory and restart ComfyUI.
+
+- **List available shaders (development):**
+
+	```bash
+	curl http://localhost:8188/cool_effects/shaders
+	```
+
+## Running tests
+
+- Run Python unit tests:
+
+	```bash
+	pytest -q tests/
+	```
+
+- Manual GPU benchmark (see GPU performance validation):
+
+	```bash
+	python tests/manual_gpu_benchmark.py --effect-name glitch --width 512 --height 512 --fps 30 --duration 3 --threshold-seconds 30
+	```
+
+## Contributing
+
+- Please open issues or pull requests for bug reports and feature suggestions.
+- Before submitting a PR, run the test suite and include reproducible steps.
+
+If you'd like, I can also provide a Spanish translation of this README or add examples for common node workflows.
