@@ -119,6 +119,11 @@ DEFAULT_PARAMS: dict[str, dict] = {
         "u_highlights_g": 0.0,
         "u_highlights_b": 0.0,
     },
+    "color_quantization": {
+        "u_levels_r": 4.0,
+        "u_levels_g": 4.0,
+        "u_levels_b": 4.0,
+    },
     "curves": {
         "u_lift": 0.0,
         "u_gamma": 1.0,

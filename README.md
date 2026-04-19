@@ -29,6 +29,7 @@ ComfyUI-CoolEffects is a custom node package for applying GLSL-driven effects to
 - `CoolHSLEffect`: outputs HSL `EFFECT_PARAMS` from hue-shift/saturation/lightness controls and includes a live preview widget.
 - `CoolColorTemperatureEffect`: outputs color-temperature `EFFECT_PARAMS` from temperature/tint controls and includes a live preview widget.
 - `CoolColorBalanceEffect`: outputs color-balance `EFFECT_PARAMS` from independent shadows/midtones/highlights RGB tint controls and includes a live preview widget.
+- `CoolColorQuantizationEffect`: outputs color-quantization `EFFECT_PARAMS` from independent RGB levels controls and includes a live preview widget.
 - `CoolCurvesEffect`: outputs curves `EFFECT_PARAMS` from lift/gamma/gain controls and includes a live preview widget.
 - `CoolLUTEffect`: outputs LUT `EFFECT_PARAMS` from a `.cube` LUT path plus intensity control and includes a live preview widget.
 - `CoolToneMappingEffect`: outputs tone-mapping `EFFECT_PARAMS` for none/BW/sepia/duotone modes with intensity + duotone shadow/highlight color controls and includes a live preview widget.

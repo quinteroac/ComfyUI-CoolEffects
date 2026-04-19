@@ -19,3 +19,13 @@
 **Pitfalls Encountered:** Python test execution is currently blocked in this environment because `pytest` is not installed (`python3 -m pytest` fails before test discovery). JS test execution remains available and was used for frontend verification.
 
 **Useful Context for Future Agents:** For future ordered/quantization effects, keep the uniform naming consistent (`u_*`) and add matching defaults in both `nodes/effect_params.py` and `web/effect_node_widget.js`; this keeps preview initialization and backend merge behavior aligned without extra wiring.
+
+## US-003 — Color Quantization Effect Node
+
+**Summary:** Implemented `CoolColorQuantizationEffect` end-to-end with backend node contract, package registration, default uniform registry entries, `color_quantization.frag` shader, frontend WebGL2 live-preview extension wiring, and Python/JS tests covering inputs, payload, shader contract, registration, and video-generator chaining.
+
+**Key Decisions:** Kept the implementation fully aligned with the existing per-effect architecture (`build_effect_params`, `mount_effect_node_widget`, importlib-based node loading in `__init__.py`) and used per-channel uniforms (`u_levels_r/g/b`) so each channel quantizes independently while keeping the shared shader uniform contract.
+
+**Pitfalls Encountered:** Full Python suite still has the known unrelated baseline failure in `tests/test_video_mixer_node.py::test_video_mixer_assembles_video_from_components_with_mixed_frames_and_audio`; targeted story-specific Python and JS checks pass.
+
+**Useful Context for Future Agents:** For RGB-channel effects, mirror both defaults registries (`nodes/effect_params.py` and `web/effect_node_widget.js`) and validate shader formula strings in node tests; this catches backend/frontend drift early and keeps preview/render semantics consistent.

@@ -153,6 +153,11 @@ const EFFECT_DEFAULT_UNIFORMS = Object.freeze({
         u_highlights_g: 0.0,
         u_highlights_b: 0.0,
     }),
+    color_quantization: Object.freeze({
+        u_levels_r: 4.0,
+        u_levels_g: 4.0,
+        u_levels_b: 4.0,
+    }),
     curves: Object.freeze({
         u_lift: 0.0,
         u_gamma: 1.0,

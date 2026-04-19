@@ -172,6 +172,12 @@ _color_balance_effect_module = _load_module_from_path(
 )
 CoolColorBalanceEffect = _color_balance_effect_module.CoolColorBalanceEffect
 
+_color_quantization_effect_module = _load_module_from_path(
+    "cool_effects_color_quantization_effect_runtime",
+    PACKAGE_ROOT / "nodes" / "color_quantization_effect.py",
+)
+CoolColorQuantizationEffect = _color_quantization_effect_module.CoolColorQuantizationEffect
+
 _curves_effect_module = _load_module_from_path(
     "cool_effects_curves_effect_runtime",
     PACKAGE_ROOT / "nodes" / "curves_effect.py",
@@ -288,6 +294,7 @@ NODE_CLASS_MAPPINGS = {
     "CoolHSLEffect": CoolHSLEffect,
     "CoolColorTemperatureEffect": CoolColorTemperatureEffect,
     "CoolColorBalanceEffect": CoolColorBalanceEffect,
+    "CoolColorQuantizationEffect": CoolColorQuantizationEffect,
     "CoolCurvesEffect": CoolCurvesEffect,
     "CoolLUTEffect": CoolLUTEffect,
     "CoolToneMappingEffect": CoolToneMappingEffect,
@@ -327,6 +334,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "CoolHSLEffect": "Cool HSL Effect",
     "CoolColorTemperatureEffect": "Cool Color Temperature Effect",
     "CoolColorBalanceEffect": "Cool Color Balance Effect",
+    "CoolColorQuantizationEffect": "Cool Color Quantization Effect",
     "CoolCurvesEffect": "Cool Curves (Lift / Gamma / Gain) Effect",
     "CoolLUTEffect": "Cool LUT Effect",
     "CoolToneMappingEffect": "Cool Tone Mapping Effect",
