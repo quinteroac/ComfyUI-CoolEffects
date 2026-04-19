@@ -121,26 +121,32 @@ def _load_video_files(video_paths: list[Path]) -> list[dict]:
             width = int(video_stream.width)
             height = int(video_stream.height)
 
+            audio_stream = next((stream for stream in container.streams if stream.type == "audio"), None)
+            audio_sample_rate: int | None = None
+            if audio_stream is not None:
+                audio_sample_rate = int(getattr(audio_stream, "rate", 0) or 0) or None
+
+            streams_to_decode = [video_stream]
+            if audio_stream is not None:
+                streams_to_decode.append(audio_stream)
+
             decoded_frames: list[torch.Tensor] = []
-            for frame in container.decode(video_stream):
-                frame_array = frame.to_rgb().to_ndarray()
-                decoded_frames.append(torch.from_numpy(frame_array).float() / 255.0)
+            audio_chunks: list[torch.Tensor] = []
+            for packet in container.demux(*streams_to_decode):
+                for frame in packet.decode():
+                    if frame.__class__.__name__ == "VideoFrame":
+                        frame_array = frame.to_rgb().to_ndarray()
+                        decoded_frames.append(torch.from_numpy(frame_array).float() / 255.0)
+                    elif frame.__class__.__name__ == "AudioFrame":
+                        audio_array = frame.to_ndarray()
+                        audio_chunks.append(_coerce_audio_chunk_to_channels_first(audio_array))
+                        if audio_sample_rate is None and getattr(frame, "sample_rate", None):
+                            audio_sample_rate = int(frame.sample_rate)
 
             if not decoded_frames:
                 raise ValueError(f"Video file has no decodable frames: {video_path.name}")
 
             video_frames = torch.stack(decoded_frames, dim=0)
-
-            audio_stream = next((stream for stream in container.streams if stream.type == "audio"), None)
-            audio_chunks: list[torch.Tensor] = []
-            audio_sample_rate: int | None = None
-            if audio_stream is not None:
-                audio_sample_rate = int(getattr(audio_stream, "rate", 0) or 0) or None
-                for audio_frame in container.decode(audio_stream):
-                    audio_array = audio_frame.to_ndarray()
-                    audio_chunks.append(_coerce_audio_chunk_to_channels_first(audio_array))
-                    if audio_sample_rate is None and getattr(audio_frame, "sample_rate", None):
-                        audio_sample_rate = int(audio_frame.sample_rate)
 
             audio_waveform = None
             if audio_chunks:

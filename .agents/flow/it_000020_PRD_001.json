@@ -1,0 +1,221 @@
+{
+  "goals": [
+    "Add 4 new effect parameter nodes covering the core retro pixel aesthetic: Pixelate, Dithering, Color Quantization, CRT Pixel Grid.",
+    "Each node produces an `EFFECT_PARAMS` output that is chainable into `CoolVideoGenerator` alongside existing effects.",
+    "Each node exposes a live WebGL2 preview widget in the ComfyUI graph (consistent with existing per-effect nodes).",
+    "No new runtime dependencies — implementation uses only `moderngl`, `torch`, `numpy`, and the existing `comfy_api.latest` stack already in the project.",
+    "Shader uniform contract matches the existing convention: every fragment shader accepts `uniform sampler2D u_image`, `uniform float u_time`, `uniform vec2 u_resolution`, plus effect-specific uniforms."
+  ],
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Pixelate / Mosaic Effect Node",
+      "description": "As a ComfyUI user creating retro-styled video, I want a `CoolPixelateEffect` node that reduces image resolution to chunky blocks so that I can produce an 8-bit / low-resolution aesthetic chainable into `CoolVideoGenerator`. Parameters: - `pixel_size` (INT, 1–128, default 8) — size of each square pixel block in output pixels - `aspect_ratio` (FLOAT, 0.25–4.0, default 1.0) — horizontal/vertical ratio of pixel blocks (values ≠ 1 produce rectangular pixels)",
+      "acceptanceCriteria": [
+        {
+          "id": "US-001-AC01",
+          "text": "`CoolPixelateEffect` node is registered and appears in the ComfyUI node picker under the CoolEffects category"
+        },
+        {
+          "id": "US-001-AC02",
+          "text": "Node exposes `pixel_size` and `aspect_ratio` inputs with the ranges/defaults above"
+        },
+        {
+          "id": "US-001-AC03",
+          "text": "Node outputs an `EFFECT_PARAMS` payload with `effect_name = \"pixelate\"` and the two param values"
+        },
+        {
+          "id": "US-001-AC04",
+          "text": "`shaders/glsl/pixelate.frag` exists and respects the shared uniform contract (`u_image`, `u_time`, `u_resolution`)"
+        },
+        {
+          "id": "US-001-AC05",
+          "text": "`web/pixelate_effect.js` mounts a live WebGL2 preview widget that updates as the user changes parameters"
+        },
+        {
+          "id": "US-001-AC06",
+          "text": "Chaining `CoolPixelateEffect` → `CoolVideoGenerator` renders a video where frames show the expected chunky-pixel mosaic effect"
+        },
+        {
+          "id": "US-001-AC07",
+          "text": "Defaults for `pixelate` are present in `nodes/effect_params.py::DEFAULT_PARAMS`"
+        },
+        {
+          "id": "US-001-AC08",
+          "text": "**[UI story]** Visually verified in browser with a sample image at `pixel_size=1` (identity), `pixel_size=32` (chunky), and `aspect_ratio=2.0` (wide pixels)"
+        },
+        {
+          "id": "US-001-AC09",
+          "text": "Python lint passes; no new dependencies added to `requirements.txt`"
+        }
+      ]
+    },
+    {
+      "id": "US-002",
+      "title": "Dithering Effect Node",
+      "description": "As a ComfyUI user targeting retro/monochrome aesthetics, I want a `CoolDitheringEffect` node that applies an ordered (Bayer) dither pattern so that I can reproduce the characteristic look of early computer graphics and print media. Parameters: - `dither_scale` (FLOAT, 0.5–8.0, default 1.0) — scale of the Bayer matrix in screen space (smaller = finer pattern) - `threshold` (FLOAT, 0.0–1.0, default 0.5) — brightness threshold applied per channel after dither offset - `palette_size` (INT, 2–16, default 2) — number of quantization levels per channel (2 = pure B/W dither, 4 = CGA-style, etc.)",
+      "acceptanceCriteria": [
+        {
+          "id": "US-002-AC01",
+          "text": "`CoolDitheringEffect` node is registered and appears in the ComfyUI node picker under the CoolEffects category"
+        },
+        {
+          "id": "US-002-AC02",
+          "text": "Node exposes `dither_scale`, `threshold`, `palette_size` inputs with the ranges/defaults above"
+        },
+        {
+          "id": "US-002-AC03",
+          "text": "Node outputs an `EFFECT_PARAMS` payload with `effect_name = \"dithering\"` and the three param values"
+        },
+        {
+          "id": "US-002-AC04",
+          "text": "`shaders/glsl/dithering.frag` exists, implements an 8×8 Bayer dither matrix, and respects the shared uniform contract"
+        },
+        {
+          "id": "US-002-AC05",
+          "text": "`web/dithering_effect.js` mounts a live WebGL2 preview widget that updates as the user changes parameters"
+        },
+        {
+          "id": "US-002-AC06",
+          "text": "Chaining `CoolDitheringEffect` → `CoolVideoGenerator` renders a video showing the ordered dither pattern at the configured scale/threshold/palette"
+        },
+        {
+          "id": "US-002-AC07",
+          "text": "Defaults for `dithering` are present in `nodes/effect_params.py::DEFAULT_PARAMS`"
+        },
+        {
+          "id": "US-002-AC08",
+          "text": "**[UI story]** Visually verified in browser with a sample image at `palette_size=2` (pure B/W dither) and `palette_size=4` (4-level dither)"
+        },
+        {
+          "id": "US-002-AC09",
+          "text": "Python lint passes; no new dependencies added to `requirements.txt`"
+        }
+      ]
+    },
+    {
+      "id": "US-003",
+      "title": "Color Quantization Effect Node",
+      "description": "As a ComfyUI user recreating specific retro hardware palettes, I want a `CoolColorQuantizationEffect` node that reduces each RGB channel to a configurable number of discrete levels so that I can reproduce NES / Game Boy / early-PC color depths. Parameters: - `levels_r` (INT, 2–32, default 4) — number of quantization levels on the red channel - `levels_g` (INT, 2–32, default 4) — number of quantization levels on the green channel - `levels_b` (INT, 2–32, default 4) — number of quantization levels on the blue channel",
+      "acceptanceCriteria": [
+        {
+          "id": "US-003-AC01",
+          "text": "`CoolColorQuantizationEffect` node is registered and appears in the ComfyUI node picker under the CoolEffects category"
+        },
+        {
+          "id": "US-003-AC02",
+          "text": "Node exposes `levels_r`, `levels_g`, `levels_b` inputs with the ranges/defaults above"
+        },
+        {
+          "id": "US-003-AC03",
+          "text": "Node outputs an `EFFECT_PARAMS` payload with `effect_name = \"color_quantization\"` and the three param values"
+        },
+        {
+          "id": "US-003-AC04",
+          "text": "`shaders/glsl/color_quantization.frag` exists, quantizes each channel independently via `floor(c * levels) / (levels - 1)`, and respects the shared uniform contract"
+        },
+        {
+          "id": "US-003-AC05",
+          "text": "`web/color_quantization_effect.js` mounts a live WebGL2 preview widget that updates as the user changes parameters"
+        },
+        {
+          "id": "US-003-AC06",
+          "text": "Chaining `CoolColorQuantizationEffect` → `CoolVideoGenerator` renders a video with visibly banded / quantized colors per channel"
+        },
+        {
+          "id": "US-003-AC07",
+          "text": "Defaults for `color_quantization` are present in `nodes/effect_params.py::DEFAULT_PARAMS`"
+        },
+        {
+          "id": "US-003-AC08",
+          "text": "**[UI story]** Visually verified in browser with a sample image at `levels_r=levels_g=levels_b=2` (8-color total) and `=8` (512-color)"
+        },
+        {
+          "id": "US-003-AC09",
+          "text": "Python lint passes; no new dependencies added to `requirements.txt`"
+        }
+      ]
+    },
+    {
+      "id": "US-004",
+      "title": "CRT Pixel Grid Effect Node",
+      "description": "As a ComfyUI user going for a vintage-monitor look, I want a `CoolCrtPixelGridEffect` node that simulates the RGB subpixel grid and scanlines of a CRT display so that the video reads as being viewed through an old-school screen. Parameters: - `pixel_size` (INT, 2–32, default 6) — size of each CRT cell (one R-G-B triad) in output pixels - `grid_strength` (FLOAT, 0.0–1.0, default 0.6) — intensity of the vertical RGB subpixel mask (0 = off, 1 = fully saturated subpixel stripes) - `scanline_strength` (FLOAT, 0.0–1.0, default 0.4) — intensity of the horizontal scanline darkening (0 = off, 1 = strong scanlines)",
+      "acceptanceCriteria": [
+        {
+          "id": "US-004-AC01",
+          "text": "`CoolCrtPixelGridEffect` node is registered and appears in the ComfyUI node picker under the CoolEffects category"
+        },
+        {
+          "id": "US-004-AC02",
+          "text": "Node exposes `pixel_size`, `grid_strength`, `scanline_strength` inputs with the ranges/defaults above"
+        },
+        {
+          "id": "US-004-AC03",
+          "text": "Node outputs an `EFFECT_PARAMS` payload with `effect_name = \"crt_pixel_grid\"` and the three param values"
+        },
+        {
+          "id": "US-004-AC04",
+          "text": "`shaders/glsl/crt_pixel_grid.frag` exists, renders both the RGB subpixel mask (vertical stripes within each cell) and horizontal scanlines, and respects the shared uniform contract"
+        },
+        {
+          "id": "US-004-AC05",
+          "text": "`web/crt_pixel_grid_effect.js` mounts a live WebGL2 preview widget that updates as the user changes parameters"
+        },
+        {
+          "id": "US-004-AC06",
+          "text": "Chaining `CoolCrtPixelGridEffect` → `CoolVideoGenerator` renders a video that visibly shows RGB subpixel stripes and darkened scanlines"
+        },
+        {
+          "id": "US-004-AC07",
+          "text": "Defaults for `crt_pixel_grid` are present in `nodes/effect_params.py::DEFAULT_PARAMS`"
+        },
+        {
+          "id": "US-004-AC08",
+          "text": "**[UI story]** Visually verified in browser with a sample image at `grid_strength=0, scanline_strength=0` (near-identity aside from pixelation) and both at `1.0` (strong CRT look)"
+        },
+        {
+          "id": "US-004-AC09",
+          "text": "Python lint passes; no new dependencies added to `requirements.txt`"
+        }
+      ]
+    }
+  ],
+  "functionalRequirements": [
+    {
+      "id": "FR-1",
+      "description": "** Every new effect registers a new entry in `NODE_CLASS_MAPPINGS` and `NODE_DISPLAY_NAME_MAPPINGS` inside `__init__.py`, loaded via the same `importlib.util.spec_from_file_location` pattern used by existing effect modules."
+    },
+    {
+      "id": "FR-2",
+      "description": "** Every new effect adds a corresponding `DEFAULT_PARAMS` entry in `nodes/effect_params.py` keyed by its `effect_name` (`\"pixelate\"`, `\"dithering\"`, `\"color_quantization\"`, `\"crt_pixel_grid\"`)."
+    },
+    {
+      "id": "FR-3",
+      "description": "** Every new fragment shader declares `uniform sampler2D u_image`, `uniform float u_time`, `uniform vec2 u_resolution`, plus the effect-specific uniforms matching the node's parameters (GLSL names in `snake_case` with `u_` prefix, e.g. `u_pixel_size`, `u_dither_scale`, `u_levels_r`, `u_grid_strength`)."
+    },
+    {
+      "id": "FR-4",
+      "description": "** `CoolVideoGenerator` must dispatch each new `effect_name` correctly: on render, it binds the effect's fragment shader and sets all of that effect's uniforms from the merged params dict."
+    },
+    {
+      "id": "FR-5",
+      "description": "** Every new JS extension reuses `mount_effect_node_widget` / `apply_effect_widget_uniform_from_widget` from `web/effect_node_widget.js` (do not reinvent preview plumbing)."
+    },
+    {
+      "id": "FR-6",
+      "description": "** Every new JS extension fetches its shader via the existing `loadShader(name)` helper in `web/shaders/loader.js` (shaders are served by `GET /cool_effects/shaders/{name}`)."
+    },
+    {
+      "id": "FR-7",
+      "description": "** GL resource lifecycle inside any new shader rendering path in `CoolVideoGenerator` follows the existing `try/finally` release order (`vao, vbo, fbo, renderbuffer, texture, program, ctx`)."
+    },
+    {
+      "id": "FR-8",
+      "description": "** All four new effects can be chained together in a single `CoolVideoGenerator` instance (e.g. Pixelate → ColorQuantization → Dithering → CrtPixelGrid) without errors and each effect's output feeds the next's `u_image` input, per the existing multi-effect chaining pipeline."
+    },
+    {
+      "id": "FR-9",
+      "description": "** Python files follow `snake_case` naming: `nodes/pixelate_effect.py`, `nodes/dithering_effect.py`, `nodes/color_quantization_effect.py`, `nodes/crt_pixel_grid_effect.py`. Shader files: `shaders/glsl/pixelate.frag`, `dithering.frag`, `color_quantization.frag`, `crt_pixel_grid.frag`. JS files: `web/pixelate_effect.js`, `web/dithering_effect.js`, `web/color_quantization_effect.js`, `web/crt_pixel_grid_effect.js`."
+    }
+  ]
+}
